@@ -1,7 +1,7 @@
 # Walris Resume Prompt
 
 **Document:** docs/06-resume-prompt.md
-**Last Updated:** 2026-07-08 (paused mid-Milestone 3)
+**Last Updated:** 2026-07-08 (paused mid-Milestone 3, Phase 2 complete)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -41,23 +41,32 @@ expected — Milestones 1 and 2 are pure setup/documentation by design.
 - Goal: Scaffold the FastAPI application (`backend/app/main.py`, `core/`, `routers/`, `services/`,
   `schemas/`, `models/`, `utils/`), implement a health endpoint, environment configuration,
   logging, and dependency management.
-- Progress: **Phase 1 (Understand the Milestone) is complete** — goal, why-it-matters, files
-  involved, acceptance criteria, and DoD have been summarized and agreed on (see below). We paused
-  right before **Phase 2 (Define Edge Cases)** — specifically, discussing what happens if the app
-  starts without required env vars, what `core/` vs `utils/` should each hold, and whether
-  `main.py` should do anything beyond wiring things together. No code or files for Milestone 3
-  have been created yet. `backend/` still only contains the placeholder `README.md` and the
-  `.venv` virtual environment shell (no packages installed).
+- Progress: **Phase 1 (Understand the Milestone) and Phase 2 (Define Edge Cases) are both
+  complete.** No code or files for Milestone 3 have been created yet. `backend/` still only
+  contains the placeholder `README.md` and the `.venv` virtual environment shell (no packages
+  installed).
 - Phase 1 summary (for quick recall next session):
   - **Acceptance Criteria:** `uvicorn app.main:app --reload` starts successfully; health endpoint
     returns HTTP 200.
   - **Definition of Done:** Backend can start locally.
+- Phase 2 — edge cases/design questions resolved:
+  - **Missing env vars:** fail fast at startup (import time), not lazily inside a request
+    handler. Established as the pattern now via a settings object loaded at boot, even though the
+    actual config surface stays tiny in M3 (no `DATABASE_URL`/API keys yet — those arrive in
+    Milestones 6 and 7). M7 will extend this same pattern with full Pydantic Settings validation.
+  - **`core/` vs `utils/`:** `core/` holds app-specific foundational pieces that know about
+    Walris (settings/config loader, logging setup). `utils/` holds generic, stateless helpers
+    with zero app-specific knowledge (e.g. a generic retry decorator) — the test is "would this
+    still make sense copy-pasted into an unrelated Python project?"
+  - **`main.py` scope:** thin entrypoint only — wires routers/config/middleware together. No
+    route handlers, business logic, or config parsing living directly in it.
 - Also open/undecided from the prior session: whether to switch `backend/.venv` from system
   Python 3.14.6 to an older version (e.g. 3.12 via pyenv/homebrew) now, or wait and only switch if
   a real dependency install failure occurs in Milestone 3. Current lean: wait and see — FastAPI/
   SQLAlchemy/Alembic/Pydantic are mature enough to likely already support 3.14.
-- **Resume here:** pick up the Phase 2 edge-case discussion for Milestone 3 (env vars missing,
-  `core/` vs `utils/` responsibilities, `main.py` scope) before writing any backend code.
+- **Resume here:** start Phase 3 (pseudocode) for Milestone 3 — sketch the control flow for
+  `main.py` startup (load settings → configure logging → create app → include routers) and the
+  health endpoint, before writing real code.
 
 ## Important Decisions
 
