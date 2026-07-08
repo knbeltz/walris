@@ -1,7 +1,7 @@
 # Walris Resume Prompt
 
 **Document:** docs/06-resume-prompt.md
-**Last Updated:** 2026-07-08 (paused mid-Milestone 3, Phase 2 complete)
+**Last Updated:** 2026-07-08 (Milestone 3 complete)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -11,9 +11,10 @@ new session.
 
 ## Current Project Status
 
-Walris exists as a GitHub repository with a scaffolded folder layout and complete project
-documentation. No application code has been written yet (no FastAPI app, no Expo app). This is
-expected — Milestones 1 and 2 are pure setup/documentation by design.
+Walris exists as a GitHub repository with a scaffolded folder layout, complete project
+documentation, and a minimal but working FastAPI backend (`uvicorn app.main:app --reload` starts
+successfully; `GET /health` returns HTTP 200). No mobile app code has been written yet — that's
+Milestone 4.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -22,7 +23,7 @@ expected — Milestones 1 and 2 are pure setup/documentation by design.
 
 - [x] **Milestone 1 — Repository & Project Setup**
 - [x] **Milestone 2 — Documentation Foundation**
-- [ ] Milestone 3 — Backend Foundation
+- [x] **Milestone 3 — Backend Foundation**
 - [ ] Milestone 4 — React Native Foundation
 - [ ] Milestone 5 — Development Environment
 - [ ] Milestone 6 — Supabase Setup
@@ -36,37 +37,45 @@ expected — Milestones 1 and 2 are pure setup/documentation by design.
 
 ## Current Milestone
 
-**Milestone 3 — Backend Foundation** (in progress — paused between Phase 1 and Phase 2)
+**Milestone 4 — React Native Foundation** (not started)
 
-- Goal: Scaffold the FastAPI application (`backend/app/main.py`, `core/`, `routers/`, `services/`,
-  `schemas/`, `models/`, `utils/`), implement a health endpoint, environment configuration,
-  logging, and dependency management.
-- Progress: **Phase 1 (Understand the Milestone) and Phase 2 (Define Edge Cases) are both
-  complete.** No code or files for Milestone 3 have been created yet. `backend/` still only
-  contains the placeholder `README.md` and the `.venv` virtual environment shell (no packages
-  installed).
-- Phase 1 summary (for quick recall next session):
-  - **Acceptance Criteria:** `uvicorn app.main:app --reload` starts successfully; health endpoint
-    returns HTTP 200.
-  - **Definition of Done:** Backend can start locally.
-- Phase 2 — edge cases/design questions resolved:
-  - **Missing env vars:** fail fast at startup (import time), not lazily inside a request
-    handler. Established as the pattern now via a settings object loaded at boot, even though the
-    actual config surface stays tiny in M3 (no `DATABASE_URL`/API keys yet — those arrive in
-    Milestones 6 and 7). M7 will extend this same pattern with full Pydantic Settings validation.
+- Goal: Initialize the Expo project (TypeScript) inside `mobile/`, install Expo Router,
+  NativeWind, React Native Reusables, and TanStack Query, and implement a basic home screen,
+  navigation foundation, and theme configuration.
+- Progress: Not started. `mobile/` currently only contains the placeholder `README.md`.
+- **Resume here:** Phase 1 (Understand the Milestone) for Milestone 4, following the same
+  workflow used for Milestone 3 (understand → edge cases → pseudocode → implementation → review →
+  refactor → sign off). Note from `docs/06-resume-prompt.md`'s Milestone 1 note: `mobile/` was
+  deliberately left empty specifically so `create-expo-app` has a clean target — don't
+  pre-create a `package.json` by hand.
+
+### Milestone 3 — Backend Foundation (complete)
+
+Full mentor workflow (Phases 1–7) was followed end to end. Summary for future reference:
+
+- **Phase 2 design decisions** (still governing backend architecture going forward):
+  - **Fail-fast config:** a `Settings` object (Pydantic `BaseSettings`) is instantiated once at
+    module import time in `app/core/config.py`. Invalid/missing required fields raise
+    immediately at startup rather than failing later inside a request handler.
   - **`core/` vs `utils/`:** `core/` holds app-specific foundational pieces that know about
     Walris (settings/config loader, logging setup). `utils/` holds generic, stateless helpers
-    with zero app-specific knowledge (e.g. a generic retry decorator) — the test is "would this
-    still make sense copy-pasted into an unrelated Python project?"
-  - **`main.py` scope:** thin entrypoint only — wires routers/config/middleware together. No
+    with zero app-specific knowledge — the test is "would this still make sense copy-pasted into
+    an unrelated Python project?"
+  - **`main.py` scope:** thin entrypoint only — wires settings/logging/app/routers together. No
     route handlers, business logic, or config parsing living directly in it.
-- Also open/undecided from the prior session: whether to switch `backend/.venv` from system
-  Python 3.14.6 to an older version (e.g. 3.12 via pyenv/homebrew) now, or wait and only switch if
-  a real dependency install failure occurs in Milestone 3. Current lean: wait and see — FastAPI/
-  SQLAlchemy/Alembic/Pydantic are mature enough to likely already support 3.14.
-- **Resume here:** start Phase 3 (pseudocode) for Milestone 3 — sketch the control flow for
-  `main.py` startup (load settings → configure logging → create app → include routers) and the
-  health endpoint, before writing real code.
+- **What got built:** `backend/app/core/config.py` (Settings with a `Literal["development",
+  "production"]` environment field, defaulting to `"development"`), `backend/app/core/logging.py`
+  (`configure_logging`, DEBUG in dev / INFO otherwise), `backend/app/routers/health.py` (`GET
+  /health` → `{"status": "ok"}`), `backend/app/main.py` (wires the above together in order:
+  settings → logging → app → routers). Empty `services/`, `schemas/`, `models/` packages exist
+  as placeholders for Milestones 11–24.
+- **Verified working:** `uvicorn app.main:app --reload` starts with no env vars set (defaults to
+  `"development"`); `GET /health` returns `200 {"status": "ok"}`; `ENVIRONMENT=production` loads
+  correctly; `ENVIRONMENT=staging` (invalid) correctly fails fast with a Pydantic
+  `ValidationError` before the server starts.
+- **Python 3.14 resolved:** all Milestone 3 dependencies (fastapi, uvicorn, pydantic-settings,
+  and their compiled sub-dependencies like pydantic-core, httptools, uvloop, watchfiles) installed
+  cleanly with prebuilt 3.14 wheels — no need to switch Python versions.
 
 ## Important Decisions
 
@@ -91,9 +100,10 @@ expected — Milestones 1 and 2 are pure setup/documentation by design.
 Router screens), `components/`, `hooks/`, `lib/`, `theme/` per `docs/02-system-architecture.md`
 §13.
 
-**Backend** — Not yet scaffolded. Will be FastAPI organized around `app/main.py`, `core/`,
-`routers/`, `services/`, `schemas/`, `models/`, `utils/` per `docs/03-development-roadmap.md`
-Milestone 3.
+**Backend** — FastAPI scaffold complete. `app/main.py` wires settings → logging → app → routers.
+`core/` holds `config.py` (Pydantic Settings, fail-fast) and `logging.py`. `routers/` holds
+`health.py` (`GET /health`). `services/`, `schemas/`, `models/`, `utils/` exist as empty packages
+awaiting later milestones. No database, no external API integrations yet.
 
 **Database** — Supabase PostgreSQL. No project created yet (Milestone 6). Planned tables:
 `briefings`, `economic_events`, `enriched_events`, `fred_series`, `news_articles`,
@@ -113,7 +123,22 @@ walris/
     README.md
   backend/
     README.md
-    .venv/            (gitignored, empty of packages)
+    requirements.txt
+    .venv/                     (gitignored; fastapi, uvicorn, pydantic-settings installed)
+    app/
+      __init__.py
+      main.py
+      core/
+        __init__.py
+        config.py
+        logging.py
+      routers/
+        __init__.py
+        health.py
+      services/__init__.py     (empty — Milestone 12+)
+      schemas/__init__.py      (empty — Milestone 14+)
+      models/__init__.py       (empty — Milestone 11)
+      utils/__init__.py        (empty — nothing needed yet)
   docs/
     01-product-requirements.md
     02-system-architecture.md
@@ -129,6 +154,12 @@ walris/
 - `.gitignore` — Python/Node/OS/editor ignores
 - `mobile/README.md`, `backend/README.md` — placeholder explainers
 - `docs/01-product-requirements.md` through `docs/06-resume-prompt.md` — full project docs
+- `backend/requirements.txt` — fastapi, uvicorn[standard], pydantic-settings
+- `backend/app/core/config.py` — `Settings` (Pydantic `BaseSettings`, fail-fast, `Literal`-typed
+  `environment` field defaulting to `"development"`)
+- `backend/app/core/logging.py` — `configure_logging(environment)`
+- `backend/app/routers/health.py` — `GET /health` → `{"status": "ok"}`
+- `backend/app/main.py` — app entrypoint, wires the above together
 
 ## Known Issues
 
@@ -136,11 +167,14 @@ walris/
   commit used git's auto-derived identity (`Kai Beltz <kaibeltz@Kais-MacBook-Pro.local>`). Worth
   setting `git config --global user.name/user.email` explicitly at some point (not done
   automatically — see git safety rules).
-- System Python is 3.14.6, which is very new. Some backend dependencies in Milestone 3 (FastAPI,
-  SQLAlchemy, Alembic, etc.) may not yet publish wheels for 3.14. If `pip install` fails on
-  compiled dependencies, consider installing a more broadly-supported Python (e.g. 3.12) via
-  pyenv/brew and recreating `backend/.venv`.
-- No `.env.example` / `.env.local.example` yet — those are Milestone 5 deliverables.
+- System Python is 3.14.6. **Resolved as a non-issue**: Milestone 3's dependencies (fastapi,
+  uvicorn, pydantic-settings, and compiled sub-deps like pydantic-core, httptools, uvloop,
+  watchfiles) all installed cleanly with prebuilt 3.14 wheels. Worth re-checking if a future
+  milestone (e.g. SQLAlchemy/Alembic in Milestone 11, or a DB driver) hits a wheel gap, but no
+  action needed for now.
+- No `.env.example` / `.env.local.example` yet — those are Milestone 5 deliverables. Backend
+  `Settings` currently has no `.env` file support wired up (no `SettingsConfigDict(env_file=...)`)
+  since there's no `.env` file yet to read from.
 - No tests, CI, or linting configured yet — Milestones 5 and 8.
 
 ## Commands
@@ -191,10 +225,11 @@ EXPO_PUBLIC_API_BASE_URL
 
 ## Next Steps
 
-1. Begin Milestone 3 — Backend Foundation: scaffold `backend/app/` structure, install FastAPI +
-   Uvicorn in `backend/.venv`, implement `GET /health`, and verify `uvicorn app.main:app --reload`
-   starts successfully.
-2. Begin Milestone 4 — React Native Foundation: run `create-expo-app` inside `mobile/` (TypeScript
-   template), install Expo Router, NativeWind, React Native Reusables, and TanStack Query.
-3. Begin Milestone 5 — Development Environment: add Ruff/Black/mypy for backend and
+1. Begin Milestone 4 — React Native Foundation: run `create-expo-app` inside `mobile/`
+   (TypeScript template), install Expo Router, NativeWind, React Native Reusables, and TanStack
+   Query, and implement a basic home screen, navigation foundation, and theme configuration.
+2. Begin Milestone 5 — Development Environment: add Ruff/Black/mypy for backend and
    ESLint/Prettier/TS-strict for mobile, plus `.env.example` files for both.
+3. Begin Milestone 6 — Supabase Setup: create the Supabase project, configure the connection, and
+   create the initial tables (`briefings`, `economic_events`, `enriched_events`, `fred_series`,
+   `news_articles`, `device_tokens`, `job_runs`).
