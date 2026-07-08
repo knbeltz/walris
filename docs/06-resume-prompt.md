@@ -1,7 +1,7 @@
 # Walris Resume Prompt
 
 **Document:** docs/06-resume-prompt.md
-**Last Updated:** 2026-07-08
+**Last Updated:** 2026-07-08 (paused mid-Milestone 3)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -36,13 +36,28 @@ expected — Milestones 1 and 2 are pure setup/documentation by design.
 
 ## Current Milestone
 
-**Milestone 3 — Backend Foundation** (not started)
+**Milestone 3 — Backend Foundation** (in progress — paused between Phase 1 and Phase 2)
 
 - Goal: Scaffold the FastAPI application (`backend/app/main.py`, `core/`, `routers/`, `services/`,
   `schemas/`, `models/`, `utils/`), implement a health endpoint, environment configuration,
   logging, and dependency management.
-- Progress: Not started. `backend/` currently only contains a placeholder `README.md` and the
-  `.venv` virtual environment shell (no packages installed yet).
+- Progress: **Phase 1 (Understand the Milestone) is complete** — goal, why-it-matters, files
+  involved, acceptance criteria, and DoD have been summarized and agreed on (see below). We paused
+  right before **Phase 2 (Define Edge Cases)** — specifically, discussing what happens if the app
+  starts without required env vars, what `core/` vs `utils/` should each hold, and whether
+  `main.py` should do anything beyond wiring things together. No code or files for Milestone 3
+  have been created yet. `backend/` still only contains the placeholder `README.md` and the
+  `.venv` virtual environment shell (no packages installed).
+- Phase 1 summary (for quick recall next session):
+  - **Acceptance Criteria:** `uvicorn app.main:app --reload` starts successfully; health endpoint
+    returns HTTP 200.
+  - **Definition of Done:** Backend can start locally.
+- Also open/undecided from the prior session: whether to switch `backend/.venv` from system
+  Python 3.14.6 to an older version (e.g. 3.12 via pyenv/homebrew) now, or wait and only switch if
+  a real dependency install failure occurs in Milestone 3. Current lean: wait and see — FastAPI/
+  SQLAlchemy/Alembic/Pydantic are mature enough to likely already support 3.14.
+- **Resume here:** pick up the Phase 2 edge-case discussion for Milestone 3 (env vars missing,
+  `core/` vs `utils/` responsibilities, `main.py` scope) before writing any backend code.
 
 ## Important Decisions
 
