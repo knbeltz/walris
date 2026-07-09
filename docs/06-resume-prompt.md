@@ -160,13 +160,20 @@ walris/
 - `backend/app/core/logging.py` — `configure_logging(environment)`
 - `backend/app/routers/health.py` — `GET /health` → `{"status": "ok"}`
 - `backend/app/main.py` — app entrypoint, wires the above together
+- `docs/05-engineering-journal.md` now has a real, user-written Entry 1 (Session Goal + Work
+  Completed only — the user has deliberately trimmed the journal template down to just those two
+  sections; don't suggest re-adding Bugs/Debugging/Learned unless they bring it up)
 
 ## Known Issues
 
-- Global git identity (`user.name`/`user.email`) is not configured on this machine; the first
-  commit used git's auto-derived identity (`Kai Beltz <kaibeltz@Kais-MacBook-Pro.local>`). Worth
-  setting `git config --global user.name/user.email` explicitly at some point (not done
-  automatically — see git safety rules).
+- Global git identity (`user.name`/`user.email`) is still not configured on this machine.
+  Confirmed this is now causing real inconsistency: early commits used
+  `Kai Beltz <kaibeltz@Kais-MacBook-Pro.local>`, but a later commit in this same session used
+  `Kai Beltz <kaibeltz@macbook-pro.mynetworksettings.com>` — git's auto-derived identity changed
+  based on network/hostname resolution. The repo's commit history now has inconsistent author
+  emails for the same person. Worth running
+  `git config --global user.name "..."` and `git config --global user.email "..."` yourself soon
+  (not done automatically — see git safety rules).
 - System Python is 3.14.6. **Resolved as a non-issue**: Milestone 3's dependencies (fastapi,
   uvicorn, pydantic-settings, and compiled sub-deps like pydantic-core, httptools, uvloop,
   watchfiles) all installed cleanly with prebuilt 3.14 wheels. Worth re-checking if a future
@@ -179,12 +186,14 @@ walris/
 
 ## Commands
 
-Backend (once scaffolded in Milestone 3):
+Backend (working now):
 
 ```bash
 source backend/.venv/bin/activate
 uvicorn app.main:app --reload
 ```
+
+Health check: `curl http://127.0.0.1:8000/health` → `{"status":"ok"}`
 
 Frontend (once scaffolded in Milestone 4):
 
