@@ -43,12 +43,8 @@ After each development session, spend 10–15 minutes writing an entry.
 
 Each entry should answer:
 
+- What was I trying to accomplish?
 - What did I build?
-- What problem did I run into?
-- How did I solve it?
-- What did I learn?
-- What still feels unclear?
-- What should I do next?
 
 Do not write vague notes.
 
@@ -57,61 +53,18 @@ Write enough detail that future-you can understand what happened.
 ## Journal Entry Template
 
 ```markdown
-## Entry [Number] — [Date]
+## Entry 1 — 7/8/26
 
 ### Session Goal
 
-What was I trying to accomplish?
+Set up the FastAPI app: initial config, logger, and health router.
 
 ### Work Completed
 
--
--
--
-
-### Technical Decisions Made
-
--
--
--
-
-### Bugs / Problems Encountered
-
--
--
--
-
-### How I Debugged
-
--
--
--
-
-### What I Learned
-
--
--
--
-
-### Claude Code Notes
-
-What did Claude Code help with?
-
-What did I understand myself?
-
-What did I rely on too heavily?
-
-### Questions / Confusions
-
--
--
--
-
-### Next Steps
-
--
--
--
+- Created a settings/config module so logging behavior can differ between development and production.
+- Implemented `configure_logging`, which sets DEBUG-level logs in development and INFO-level logs in production.
+- Created a health router returning `{"status": "ok"}` on `GET /health` with an HTTP 200 response.
+- Wired settings, logging, and the health router together in `main.py`, creating the FastAPI app instance.
 ```
 
 ## Example Entry
