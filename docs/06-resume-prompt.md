@@ -1,7 +1,7 @@
 # Walris Resume Prompt
 
 **Document:** docs/06-resume-prompt.md
-**Last Updated:** 2026-07-08 (Milestone 3 complete)
+**Last Updated:** 2026-07-09 (Milestone 4 complete)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -12,9 +12,10 @@ new session.
 ## Current Project Status
 
 Walris exists as a GitHub repository with a scaffolded folder layout, complete project
-documentation, and a minimal but working FastAPI backend (`uvicorn app.main:app --reload` starts
-successfully; `GET /health` returns HTTP 200). No mobile app code has been written yet — that's
-Milestone 4.
+documentation, a minimal but working FastAPI backend (`uvicorn app.main:app --reload` starts
+successfully; `GET /health` returns HTTP 200), and a minimal but working Expo mobile app (Expo
+Router + NativeWind + React Native Reusables + TanStack Query, verified launching via Expo Go on
+a physical iPhone). No real screens/data fetching exist yet — that's later milestones.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -24,7 +25,7 @@ Milestone 4.
 - [x] **Milestone 1 — Repository & Project Setup**
 - [x] **Milestone 2 — Documentation Foundation**
 - [x] **Milestone 3 — Backend Foundation**
-- [ ] Milestone 4 — React Native Foundation
+- [x] **Milestone 4 — React Native Foundation**
 - [ ] Milestone 5 — Development Environment
 - [ ] Milestone 6 — Supabase Setup
 - [ ] Milestone 7 — Configuration System
@@ -37,17 +38,66 @@ Milestone 4.
 
 ## Current Milestone
 
-**Milestone 4 — React Native Foundation** (not started)
+**Milestone 5 — Development Environment** (not started)
 
-- Goal: Initialize the Expo project (TypeScript) inside `mobile/`, install Expo Router,
-  NativeWind, React Native Reusables, and TanStack Query, and implement a basic home screen,
-  navigation foundation, and theme configuration.
-- Progress: Not started. `mobile/` currently only contains the placeholder `README.md`.
-- **Resume here:** Phase 1 (Understand the Milestone) for Milestone 4, following the same
-  workflow used for Milestone 3 (understand → edge cases → pseudocode → implementation → review →
-  refactor → sign off). Note from `docs/06-resume-prompt.md`'s Milestone 1 note: `mobile/` was
-  deliberately left empty specifically so `create-expo-app` has a clean target — don't
-  pre-create a `package.json` by hand.
+- Goal: Standardize local dev tooling. Backend: Ruff, Black, mypy. Frontend: ESLint, Prettier,
+  TypeScript strict mode (already on by default from the Expo template, per Milestone 4 — just
+  needs ESLint/Prettier added around it). Create `backend/.env.example` and
+  `mobile/.env.local.example`.
+- Progress: Not started.
+- **Resume here:** Phase 1 (Understand the Milestone) for Milestone 5, following the same
+  mentor workflow used for Milestones 3–4 (understand → edge cases → pseudocode → implementation →
+  review → refactor → sign off).
+
+### Milestone 4 — React Native Foundation (complete)
+
+Full mentor workflow (Phases 1–7) was followed end to end, same as Milestone 3.
+
+- **Real problems hit and fixed along the way** (worth knowing before touching `mobile/` again):
+  - Scaffolding on the newest Expo SDK (57) hit an internal Expo inconsistency — expo-router's
+    bundled web/DOM-components support (Radix UI + `vaul`) pulled a newer `react-dom` than the
+    base template's pinned `react`, causing an npm ERESOLVE conflict. **This was not fixed by
+    downgrading to SDK 54** — the same conflict recurred, because the root cause (an unbounded
+    peer dep on `react-dom`) exists independent of SDK version. The actual fix: a `"react-dom"`
+    entry in `package.json`'s `overrides`, pinned to match `react`'s version. Safe because the app
+    never uses expo-router's DOM-components feature.
+  - We deliberately settled on **Expo SDK 54** anyway (not 57) because it's the pairing NativeWind
+    itself documents as tested (`Expo SDK 54 + NativeWind v4.1`), and it's more likely to have
+    broad ecosystem compatibility than the newest SDK.
+  - NativeWind's actual engine (`react-native-css-interop`) requires **Tailwind CSS ~3.x**, not
+    the current Tailwind v4 — pin `tailwindcss@^3.4.17` explicitly, don't take whatever's latest.
+  - The `@react-native-reusables/cli doctor` command's interactive prompts don't all understand
+    `--yes`/piped `yes` cleanly — two free-text prompts (CSS/Tailwind file paths) got the literal
+    text `"y"` written into `components.json` instead of accepting their defaults. Always spot-check
+    `components.json` after running `doctor` non-interactively.
+  - `expo-router/react-navigation` (a convenience re-export) doesn't exist in expo-router's SDK-54
+    version — use `@react-navigation/native` directly for `ThemeProvider`/`DarkTheme`/`DefaultTheme`/
+    `Theme`.
+  - `expo-doctor` (Expo's own project health checker, separate from RNR's `doctor`) caught a missing
+    `react-native-worklets` peer dependency required by `react-native-reanimated` that doesn't hard-fail
+    until runtime — worth running `npx expo-doctor` after any native-module install.
+- **What got built:** Expo SDK 54 TypeScript project in `mobile/`; Expo Router (`app/_layout.tsx`
+  Stack navigator, `app/index.tsx` home route); NativeWind fully configured (`tailwind.config.js`,
+  `babel.config.js`, `metro.config.js`, `global.css`); `@/*` path alias; React Native Reusables
+  (`components/ui/`: `button`, `card`, `badge`, `separator`, `text`) plus its prerequisites
+  (`lib/utils.ts` cn helper, `PortalHost` in root layout, `inlineRem: 16` in Metro config);
+  TanStack Query (`lib/queryClient.ts`, `QueryClientProvider` in root layout); Walris's actual
+  design-system colors converted to HSL and wired through `global.css` → `tailwind.config.js` →
+  `lib/theme.ts` (React Navigation chrome theme).
+- **Judgment calls made where the design doc (`04-design-system.md`) doesn't specify a value** —
+  worth revisiting if they look wrong once real screens are built: `border`/`input` = surface-variant
+  (#d3e4fe), `ring` = primary (#000000), `destructive`-foreground = white, chart-1–5 = React Native
+  Reusables' shadcn defaults (unused until the Historical Chart milestone). The `--radius` base
+  (`0.75rem`) was *not* a guess — it was derived directly from the design doc's own shape system so
+  that Tailwind's `sm`/`lg` radii land on the doc's Button/Input (8px) and Card/Modal (12px) values.
+- **Deferred on purpose:** custom font loading (Libre Caslon Text / Inter / JetBrains Mono) — the
+  home screen currently uses the system default font. Dark mode — the design doc never defines a
+  dark palette, and `app.json` has `"userInterfaceStyle": "light"` (forces light regardless of
+  system setting); `lib/theme.ts`'s `dark` key currently just mirrors `light`.
+- **Verified working:** `npx expo start` + Expo Go on a physical iPhone 17 Pro (no Xcode/Android
+  Studio on this machine — verification was on a real device, not a simulator); home screen renders
+  "Walris" heading, subtitle, and a themed "Get started" button; `npx tsc --noEmit`,
+  `npx @react-native-reusables/cli doctor`, and `npx expo-doctor` all pass clean.
 
 ### Milestone 3 — Backend Foundation (complete)
 
@@ -93,12 +143,22 @@ Full mentor workflow (Phases 1–7) was followed end to end. Summary for future 
 - Commit messages must **not** include a "Co-Authored-By: Claude" trailer (user preference).
 - `mobile/` and `backend/` were intentionally left as placeholders in Milestone 1 — full scaffolds
   happen in Milestone 4 (Expo) and Milestone 3 (FastAPI) respectively, per the roadmap.
+- Mobile is pinned to **Expo SDK 54**, not the newest SDK (57 at the time of Milestone 4), because
+  NativeWind's own docs test against SDK 54 and it avoided an internal Expo dependency conflict
+  present on SDK 57 (see Milestone 4 notes above). Re-evaluate the SDK version deliberately before
+  ever bumping it — don't just take whatever `npx create-expo-app` defaults to.
 
 ## Current Architecture
 
-**Frontend** — Not yet scaffolded. Will be Expo + TypeScript, organized around `app/` (Expo
-Router screens), `components/`, `hooks/`, `lib/`, `theme/` per `docs/02-system-architecture.md`
-§13.
+**Frontend** — Expo SDK 54 + TypeScript scaffold complete. `app/_layout.tsx` wires
+`SafeAreaProvider` → `QueryClientProvider` → React Navigation `ThemeProvider` → `Stack` →
+`PortalHost`. `app/index.tsx` is a placeholder home screen. `components/ui/` holds React Native
+Reusables primitives (`button`, `card`, `badge`, `separator`, `text`). `lib/` holds `utils.ts`
+(cn helper), `theme.ts` (Walris colors as React Navigation theme), `queryClient.ts`. Styling is
+NativeWind (Tailwind-style `className`) with Walris's actual design-system colors wired through
+`global.css` → `tailwind.config.js`. No custom fonts loaded yet (deferred), no real screens/data
+fetching yet (later milestones) — `hooks/` and `theme/typography.ts` from
+`docs/02-system-architecture.md` §13 don't exist yet.
 
 **Backend** — FastAPI scaffold complete. `app/main.py` wires settings → logging → app → routers.
 `core/` holds `config.py` (Pydantic Settings, fail-fast) and `logging.py`. `routers/` holds
@@ -121,6 +181,29 @@ walris/
   README.md
   mobile/
     README.md
+    package.json
+    app.json                  (scheme: "walris", userInterfaceStyle: "light")
+    tsconfig.json             (strict: true, "@/*" path alias)
+    tailwind.config.js
+    babel.config.js
+    metro.config.js
+    global.css                (Walris color tokens as CSS variables)
+    components.json           (React Native Reusables config)
+    nativewind-env.d.ts
+    app/
+      _layout.tsx              (SafeAreaProvider > QueryClientProvider > ThemeProvider > Stack > PortalHost)
+      index.tsx                 (placeholder home screen)
+    components/
+      ui/
+        button.tsx
+        card.tsx
+        badge.tsx
+        separator.tsx
+        text.tsx
+    lib/
+      utils.ts                 (cn helper)
+      theme.ts                 (Walris colors as React Navigation theme)
+      queryClient.ts
   backend/
     README.md
     requirements.txt
@@ -163,6 +246,12 @@ walris/
 - `docs/05-engineering-journal.md` now has a real, user-written Entry 1 (Session Goal + Work
   Completed only — the user has deliberately trimmed the journal template down to just those two
   sections; don't suggest re-adding Bugs/Debugging/Learned unless they bring it up)
+- `mobile/app/_layout.tsx`, `mobile/app/index.tsx` — Expo Router root layout and home screen
+- `mobile/global.css`, `mobile/tailwind.config.js`, `mobile/lib/theme.ts` — Walris design-system
+  colors wired through NativeWind and React Navigation (see Milestone 4 notes above for the
+  judgment calls made where the design doc didn't specify a value)
+- `mobile/components/ui/` — React Native Reusables primitives (button, card, badge, separator, text)
+- `mobile/lib/utils.ts`, `mobile/lib/queryClient.ts` — cn helper and TanStack Query client
 
 ## Known Issues
 
@@ -183,6 +272,16 @@ walris/
   `Settings` currently has no `.env` file support wired up (no `SettingsConfigDict(env_file=...)`)
   since there's no `.env` file yet to read from.
 - No tests, CI, or linting configured yet — Milestones 5 and 8.
+- No Xcode or Android Studio installed on this machine (only Xcode Command Line Tools) — no iOS
+  Simulator or Android emulator available. Mobile verification happens via Expo Go on a physical
+  iPhone 17 Pro instead. Fine for now; would need addressing before any native-build-only feature
+  (e.g. custom native modules) or CI device testing later.
+- `mobile/package.json` has a `"react-dom": "19.1.0"` entry under `overrides` — needed to resolve
+  an expo-router internal peer-dependency conflict (see Milestone 4 notes above). Not a real
+  runtime dependency; safe to leave as long as expo-router's DOM-components feature stays unused.
+- Mobile has no custom fonts loaded yet (Libre Caslon Text / Inter / JetBrains Mono per
+  `docs/04-design-system.md` §5) — deliberately deferred until a milestone that builds a real
+  screen needing them. Currently renders with the system default font.
 
 ## Commands
 
@@ -195,11 +294,15 @@ uvicorn app.main:app --reload
 
 Health check: `curl http://127.0.0.1:8000/health` → `{"status":"ok"}`
 
-Frontend (once scaffolded in Milestone 4):
+Frontend (working now):
 
 ```bash
+cd mobile
 npx expo start
 ```
+
+Scan the QR code with the Expo Go app (verified on a physical iPhone; no Xcode/Android Studio on
+this machine, so no simulator available — see Known Issues).
 
 Database (once Alembic is set up in Milestone 11):
 
@@ -234,11 +337,10 @@ EXPO_PUBLIC_API_BASE_URL
 
 ## Next Steps
 
-1. Begin Milestone 4 — React Native Foundation: run `create-expo-app` inside `mobile/`
-   (TypeScript template), install Expo Router, NativeWind, React Native Reusables, and TanStack
-   Query, and implement a basic home screen, navigation foundation, and theme configuration.
-2. Begin Milestone 5 — Development Environment: add Ruff/Black/mypy for backend and
-   ESLint/Prettier/TS-strict for mobile, plus `.env.example` files for both.
-3. Begin Milestone 6 — Supabase Setup: create the Supabase project, configure the connection, and
+1. Begin Milestone 5 — Development Environment: add Ruff/Black/mypy for backend and
+   ESLint/Prettier for mobile (TypeScript strict mode is already on from the Expo template), plus
+   `backend/.env.example` and `mobile/.env.local.example`.
+2. Begin Milestone 6 — Supabase Setup: create the Supabase project, configure the connection, and
    create the initial tables (`briefings`, `economic_events`, `enriched_events`, `fred_series`,
    `news_articles`, `device_tokens`, `job_runs`).
+3. Begin Milestone 7 — Configuration System.
