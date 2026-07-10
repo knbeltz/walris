@@ -1,7 +1,7 @@
 # Walris Resume Prompt
 
 **Document:** docs/06-resume-prompt.md
-**Last Updated:** 2026-07-10 (Milestone 6 complete)
+**Last Updated:** 2026-07-10 (Milestone 7 complete)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -32,7 +32,7 @@ with a real query. No real screens/data fetching exist yet — that's later mile
 - [x] **Milestone 4 — React Native Foundation**
 - [x] **Milestone 5 — Development Environment**
 - [x] **Milestone 6 — Supabase Setup**
-- [ ] Milestone 7 — Configuration System
+- [x] **Milestone 7 — Configuration System**
 - [ ] Milestone 8 — Continuous Integration
 - [ ] Milestone 9 — API Foundation
 - [ ] Milestone 10 — First End-to-End Connection
@@ -42,23 +42,46 @@ with a real query. No real screens/data fetching exist yet — that's later mile
 
 ## Current Milestone
 
-**Milestone 7 — Configuration System** (not started)
+**Milestone 8 — Continuous Integration** (not started)
 
-- Goal per the roadmap: centralize config (API keys, database URL, environment, secrets) via
-  environment variables, with Pydantic validation and graceful fail-fast on missing required
-  vars.
-- **Heads up before starting:** this overlaps substantially with what already exists. `Settings`
-  (`backend/app/core/config.py`) already validates `database_url` and `environment` via Pydantic
-  `BaseSettings` with fail-fast behavior (raises at import time if required fields are missing —
-  established in Milestone 3, extended in Milestone 6). The real remaining work is likely just
-  adding `Settings` fields for the API keys as their respective milestones need them (Finnhub,
-  FRED, Marketaux, OpenAI, Expo push, admin secret), not building the validation mechanism itself.
-  Worth a deliberate scope check in Phase 1 rather than assuming from the roadmap's wording alone
-  — this is the second milestone in a row (after the Milestone 6/11 overlap) where the roadmap's
-  literal text undersells how much is already done.
-- **Resume here:** Phase 1 (Understand the Milestone) for Milestone 7, following the same
-  mentor workflow used for Milestones 3–6 (understand → edge cases → pseudocode → implementation →
+- Goal per the roadmap: GitHub Actions running Ruff/Black/mypy (backend) and ESLint/TypeScript
+  (frontend) on every pull request.
+- **Heads up before starting:** the roadmap says "Black" again here, same as Milestone 5 — stick
+  with the Milestone 5 decision (**Ruff alone**, its formatter is Black-compatible) rather than
+  reintroducing Black for CI specifically. Also worth deciding upfront whether mypy `--strict`
+  and `npx tsc --noEmit` run in CI too (not explicitly listed in the roadoc's wording, but skipping
+  type-checking in CI while running it locally seems like an obvious gap worth closing).
+- **Resume here:** Phase 1 (Understand the Milestone) for Milestone 8, following the same
+  mentor workflow used for Milestones 3–7 (understand → edge cases → pseudocode → implementation →
   review → refactor → sign off).
+
+### Milestone 7 — Configuration System (complete)
+
+Much lighter than Milestones 3–6 — this was a **verification milestone, not a build one**.
+
+- **What happened:** reading the roadmap's Acceptance Criteria ("fails gracefully when required
+  variables are missing") and Definition of Done ("no secrets are hardcoded") literally, both were
+  already true from Milestones 3 and 6 — `Settings` is a Pydantic `BaseSettings` that fails fast
+  on missing `database_url`, and nothing sensitive has ever been hardcoded (everything lives in
+  gitignored `.env`). Flagged this overlap explicitly and discussed two options: (A) verify the
+  existing behavior and sign off, or (B) pre-declare `Settings` fields now for every future API
+  key (Finnhub, FRED, Marketaux, OpenAI, admin secret, Expo push), even though nothing reads them
+  yet.
+- **Decision: Option A**, deliberately. Option B's only apparent benefit (less work later) turned
+  out to be illusory — to add those fields today they'd have to be `Optional[str] = None` (since
+  nothing sets them yet), which would quietly defeat the fail-fast guarantee this milestone is
+  about: an optional field can't distinguish "genuinely missing, something will break" from
+  "intentionally unused right now," it just silently returns `None` either way. When each key's
+  owning milestone actually arrives and needs it to be a *required* field, we'd have to change it
+  from optional to required anyway — so pre-declaring wouldn't have saved real work, just added a
+  placeholder that gets redone later while weakening `Settings` as an accurate, honest reflection
+  of what the app currently uses.
+- **Verification performed:** confirmed no hardcoded secrets anywhere in tracked backend files
+  (`git grep` for key/secret/password/token literal assignments — none found). Directly tested
+  the fail-fast behavior by temporarily removing `backend/.env` and confirming `Settings()` raises
+  a clear `pydantic.ValidationError` pointing at the missing `database_url` field, then restored
+  `.env` and confirmed normal startup still works.
+- **No code changes this milestone** — purely a scope read + verification pass.
 
 ### Milestone 6 — Supabase Setup (complete)
 
@@ -304,6 +327,12 @@ Full mentor workflow (Phases 1–7) was followed end to end. Summary for future 
   Milestone 11 as the roadmap's wording might suggest — Alembic's autogenerate needs the models to
   exist to diff against, so there was no way to do Milestone 6's migration-system deliverable
   without them. Milestone 11 will likely be a light touch-up, not new model design.
+- **Standing principle (confirmed again in Milestone 7):** don't pre-declare config fields, model
+  fields, or scaffolding before the code that actually needs them exists — even when a roadmap
+  milestone's wording suggests doing so now. Every time this has come up (font loading and dark
+  mode in Milestone 4, API keys in Milestone 5, now `Settings` fields in Milestone 7), building
+  ahead of need has turned out to cost more than it saves, usually by weakening some other
+  guarantee (fail-fast validation, in Milestone 7's case) rather than actually being free.
 
 ## Current Architecture
 
@@ -418,6 +447,7 @@ walris/
     04-design-system.md
     05-engineering-journal.md
     06-resume-prompt.md
+    07-learning-notes.md
 ```
 
 ## Key Files Created
@@ -546,7 +576,7 @@ EXPO_PUBLIC_API_BASE_URL
 
 ## Next Steps
 
-1. Begin Milestone 7 — Configuration System: check scope carefully first (see Current Milestone
-   note above — much of this may already be satisfied by Milestones 3 and 6).
-2. Begin Milestone 8 — Continuous Integration.
-3. Begin Milestone 9 — API Foundation.
+1. Begin Milestone 8 — Continuous Integration: GitHub Actions running Ruff + mypy (not Black —
+   see Current Milestone note above) and ESLint + `tsc` on every pull request.
+2. Begin Milestone 9 — API Foundation.
+3. Begin Milestone 10 — First End-to-End Connection.
