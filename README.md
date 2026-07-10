@@ -38,6 +38,7 @@ Full documentation lives in [`docs/`](docs/):
 - [`04-design-system.md`](docs/04-design-system.md) — visual design system and content style
 - [`05-engineering-journal.md`](docs/05-engineering-journal.md) — running engineering journal (living document)
 - [`06-resume-prompt.md`](docs/06-resume-prompt.md) — current project status, for resuming work
+- [`07-learning-notes.md`](docs/07-learning-notes.md) — concepts and debugging lessons worth remembering (living document)
 
 ## Status
 
