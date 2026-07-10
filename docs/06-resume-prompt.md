@@ -1,7 +1,7 @@
 # Walris Resume Prompt
 
 **Document:** docs/06-resume-prompt.md
-**Last Updated:** 2026-07-10 (Milestone 7 complete)
+**Last Updated:** 2026-07-10 (Milestone 8 complete)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -19,7 +19,9 @@ a physical iPhone). Both apps now have linting/formatting/type-checking tooling 
 (Ruff + strict mypy on backend; ESLint + Prettier on mobile) and `.env.example` files documenting
 required configuration. The backend now has a real Supabase Postgres database behind it — all
 seven core tables exist, migrations run through Alembic, and `GET /health` proves connectivity
-with a real query. No real screens/data fetching exist yet — that's later milestones.
+with a real query. GitHub Actions CI now runs all of the above (lint/format/type-check, both
+apps) on every push to `main` and every pull request, verified passing on a real run. No real
+screens/data fetching exist yet — that's later milestones.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -33,7 +35,7 @@ with a real query. No real screens/data fetching exist yet — that's later mile
 - [x] **Milestone 5 — Development Environment**
 - [x] **Milestone 6 — Supabase Setup**
 - [x] **Milestone 7 — Configuration System**
-- [ ] Milestone 8 — Continuous Integration
+- [x] **Milestone 8 — Continuous Integration**
 - [ ] Milestone 9 — API Foundation
 - [ ] Milestone 10 — First End-to-End Connection
 - [ ] Milestones 11–26 — Core Backend (Part 2)
@@ -42,18 +44,44 @@ with a real query. No real screens/data fetching exist yet — that's later mile
 
 ## Current Milestone
 
-**Milestone 8 — Continuous Integration** (not started)
+**Milestone 9 — API Foundation** (not started)
 
-- Goal per the roadmap: GitHub Actions running Ruff/Black/mypy (backend) and ESLint/TypeScript
-  (frontend) on every pull request.
-- **Heads up before starting:** the roadmap says "Black" again here, same as Milestone 5 — stick
-  with the Milestone 5 decision (**Ruff alone**, its formatter is Black-compatible) rather than
-  reintroducing Black for CI specifically. Also worth deciding upfront whether mypy `--strict`
-  and `npx tsc --noEmit` run in CI too (not explicitly listed in the roadoc's wording, but skipping
-  type-checking in CI while running it locally seems like an obvious gap worth closing).
-- **Resume here:** Phase 1 (Understand the Milestone) for Milestone 8, following the same
-  mentor workflow used for Milestones 3–7 (understand → edge cases → pseudocode → implementation →
-  review → refactor → sign off).
+- Goal per the roadmap: reusable backend infrastructure — API versioning, standardized error
+  responses, response models, logging middleware, request validation, global exception handling.
+  Acceptance: all endpoints return standardized responses. DoD: "backend infrastructure is
+  production-ready."
+- **Resume here:** Phase 1 (Understand the Milestone) for Milestone 9, following the same
+  mentor workflow used for Milestones 3–8 (understand → edge cases → pseudocode → implementation →
+  review → refactor → sign off). Unlike the last two milestones, this one looks like genuinely new
+  work, not overlap with something already built — worth confirming that read in Phase 1 rather
+  than assuming, given the pattern lately.
+
+### Milestone 8 — Continuous Integration (complete)
+
+- **Decisions made (with reasoning):**
+  - **Trigger on both `push` to `main` and `pull_request`**, not pull-request-only as the roadmap
+    literally says. Every commit across this entire project so far has gone straight to `main` —
+    no feature branches or PRs used at all. A pull-request-only trigger would have meant the CI
+    workflow essentially never ran, given actual observed workflow. Running on both means it's
+    useful today (direct pushes) and still works if a PR-based workflow gets adopted later.
+  - **Fuller check scope than the roadmap's literal list** — added mypy `--strict`, `tsc --noEmit`,
+    and Prettier's format check on top of the roadmap's named Ruff/ESLint/TypeScript, matching
+    everything actually run locally. Reasoning: CI that's narrower than local checks creates a real
+    gap — e.g. unformatted code could merge/land on `main` with CI staying green the whole time.
+  - **Ruff alone, no Black** — same reasoning as Milestone 5; the roadmap repeats "Black" here too,
+    but it'd be inconsistent to reintroduce a tool we deliberately dropped two milestones ago.
+- **What got built:** `.github/workflows/ci.yml` — one workflow, two parallel jobs. `backend` job:
+  Python 3.14 → `pip install -r requirements-dev.txt` → `ruff check` → `ruff format --check` →
+  `mypy`. `mobile` job: Node 26 → `npm ci` → `npm run lint` → `npx tsc --noEmit` →
+  `npm run format:check`.
+- **Verified empirically, not just by reading docs:** neither Python 3.14 nor Node 26 are
+  confirmed-supported in GitHub Actions' hosted runners by documentation alone (both are quite
+  new), so rather than keep researching, the workflow was pushed for real and watched end to end —
+  both jobs passed on the first run. One harmless notice appeared: GitHub flagged that
+  `actions/checkout@v4`/`actions/setup-python@v5`'s own internal Node.js runtime (unrelated to our
+  specified Python/Node versions) targets a deprecated Node 20 and is being auto-forced to Node 24
+  — this is GitHub handling its own action infrastructure transparently, not something requiring
+  any fix here.
 
 ### Milestone 7 — Configuration System (complete)
 
@@ -333,6 +361,11 @@ Full mentor workflow (Phases 1–7) was followed end to end. Summary for future 
   mode in Milestone 4, API keys in Milestone 5, now `Settings` fields in Milestone 7), building
   ahead of need has turned out to cost more than it saves, usually by weakening some other
   guarantee (fail-fast validation, in Milestone 7's case) rather than actually being free.
+- CI (`.github/workflows/ci.yml`) runs on **both `push` to `main` and `pull_request`**, not
+  PR-only as the roadmap literally says — matches actual observed workflow (no branches/PRs used
+  so far), while still working if that changes later. CI checks are **broader than the roadmap's
+  literal list**: Ruff, mypy `--strict`, ESLint, `tsc --noEmit`, and Prettier's format check — the
+  same set run locally, not a narrower CI-only subset.
 
 ## Current Architecture
 
@@ -370,6 +403,9 @@ Decisions). Migrations run through Alembic (`backend/alembic/`), which reuses th
 ```text
 walris/
   .git/
+  .github/
+    workflows/
+      ci.yml                   (backend + mobile jobs; push to main + pull_request)
   .gitignore
   README.md
   mobile/
@@ -484,6 +520,8 @@ walris/
   `EnrichedEvent`, `FredSeries`, `NewsArticle`, `DeviceToken`, `JobRun`)
 - `backend/alembic/` — migration system; one applied migration creating all 7 tables in Supabase
 - `backend/app/routers/health.py` — `GET /health` now runs a real `SELECT 1` through the DB
+- `.github/workflows/ci.yml` — GitHub Actions: Ruff/mypy (backend) + ESLint/tsc/Prettier (mobile)
+  on push to `main` and on pull requests; verified passing on a real run, not just written
 
 ## Known Issues
 
@@ -500,7 +538,9 @@ walris/
   watchfiles) all installed cleanly with prebuilt 3.14 wheels. Worth re-checking if a future
   milestone (e.g. SQLAlchemy/Alembic in Milestone 11, or a DB driver) hits a wheel gap, but no
   action needed for now.
-- No tests or CI configured yet — Milestone 8. Linting/formatting (Milestone 5) is done.
+- No automated tests exist yet (no pytest/jest suite) — CI (Milestone 8) runs linting/type
+  checking/formatting on every push/PR, but there's nothing to actually test yet since there's no
+  business logic beyond config/models/health checks. Add real tests as they become meaningful.
 - No Xcode or Android Studio installed on this machine (only Xcode Command Line Tools) — no iOS
   Simulator or Android emulator available. Mobile verification happens via Expo Go on a physical
   iPhone 17 Pro instead. Fine for now; would need addressing before any native-build-only feature
@@ -576,7 +616,7 @@ EXPO_PUBLIC_API_BASE_URL
 
 ## Next Steps
 
-1. Begin Milestone 8 — Continuous Integration: GitHub Actions running Ruff + mypy (not Black —
-   see Current Milestone note above) and ESLint + `tsc` on every pull request.
-2. Begin Milestone 9 — API Foundation.
-3. Begin Milestone 10 — First End-to-End Connection.
+1. Begin Milestone 9 — API Foundation: API versioning, standardized error responses, response
+   models, logging middleware, request validation, global exception handling.
+2. Begin Milestone 10 — First End-to-End Connection.
+3. Begin Milestones 11–26 — Core Backend (Part 2).
