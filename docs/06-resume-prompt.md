@@ -1,7 +1,7 @@
 # Walris Resume Prompt
 
 **Document:** docs/06-resume-prompt.md
-**Last Updated:** 2026-07-10 (Milestone 8 complete)
+**Last Updated:** 2026-07-10 (Milestone 9 complete)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -36,7 +36,7 @@ screens/data fetching exist yet — that's later milestones.
 - [x] **Milestone 6 — Supabase Setup**
 - [x] **Milestone 7 — Configuration System**
 - [x] **Milestone 8 — Continuous Integration**
-- [ ] Milestone 9 — API Foundation
+- [x] **Milestone 9 — API Foundation**
 - [ ] Milestone 10 — First End-to-End Connection
 - [ ] Milestones 11–26 — Core Backend (Part 2)
 - [ ] Milestones 27–40 — Mobile App (Part 3)
@@ -44,17 +44,78 @@ screens/data fetching exist yet — that's later milestones.
 
 ## Current Milestone
 
-**Milestone 9 — API Foundation** (not started)
+**Milestone 10 — First End-to-End Connection** (not started)
 
-- Goal per the roadmap: reusable backend infrastructure — API versioning, standardized error
-  responses, response models, logging middleware, request validation, global exception handling.
-  Acceptance: all endpoints return standardized responses. DoD: "backend infrastructure is
-  production-ready."
-- **Resume here:** Phase 1 (Understand the Milestone) for Milestone 9, following the same
-  mentor workflow used for Milestones 3–8 (understand → edge cases → pseudocode → implementation →
-  review → refactor → sign off). Unlike the last two milestones, this one looks like genuinely new
-  work, not overlap with something already built — worth confirming that read in Phase 1 rather
-  than assuming, given the pattern lately.
+- Goal per the roadmap: verify the mobile app talks to the backend for the first time. Backend:
+  `GET /health` (already exists). Frontend: call it via TanStack Query, display "Backend
+  Connected / Status: Healthy," handle loading/error/success states.
+- **Working agreement change starting this milestone:** the user writes pseudocode and the actual
+  implementation (the TanStack Query hook, the screen's loading/error/success UI); Claude handles
+  configuration/tooling and reviews. See Important Decisions below for the full agreement,
+  including the split on edge cases (Claude surfaces technical/infra ones; logical/behavioral
+  ones are worked out together). This is a deliberate, good first milestone to start on — small,
+  contained, no architectural decisions riding on it.
+- **Resume here:** Phase 1 (Understand the Milestone) for Milestone 10, following the same
+  mentor workflow used for Milestones 3–9 (understand → edge cases → pseudocode → implementation →
+  review → refactor → sign off), under the new working agreement.
+- Reference: `docs/08-code-reference-milestones-3-6-9.md` has a full snapshot of the Milestone
+  3/6/9 code (the milestones with real logic, as opposed to pure config) for study — not a
+  template to copy forward.
+
+### Milestone 9 — API Foundation (complete)
+
+Full mentor workflow (Phases 1–7), still Claude-implemented (the working-agreement change to
+user-written code starts at Milestone 10, not this one).
+
+- **Decisions made (with reasoning):**
+  - **URL-prefix versioning** (`/v1/...`), not header-based — simpler to understand, test, and
+    debug (curl/browser-visible) than an `Accept` header scheme, and it's what most real-world
+    APIs (Stripe, GitHub) actually do regardless of REST purism.
+  - **Raw resource + standardized errors only**, not a full success/error envelope — matches
+    FastAPI's own idiom; a successful `GET /briefings/today` returns the briefing object directly,
+    only *failure* responses get a predictable `{"error": {...}, "request_id": ...}` shape. Keeps
+    the mobile app's happy-path code simple.
+  - **`/health` stays unversioned** (not `/v1/health`) — health checks are an operational concern
+    (uptime monitors, load balancers) that should stay decoupled from the versioned business API
+    contract, which will evolve independently over time.
+  - **`request_id` added** (not explicitly asked for by the roadmap) — ties the logging middleware
+    and error responses together so a specific failure can always be matched to its exact server
+    log line.
+  - **Error codes as a small fixed set mapped from HTTP status** (`404→NOT_FOUND`,
+    `422→VALIDATION_ERROR`, etc.), not bespoke per-endpoint codes — generic infrastructure
+    shouldn't guess at business-specific error cases that don't exist yet.
+  - **Dev vs. prod behavior for unhandled exceptions** — full exception always logged server-side;
+    the real message is only included in the API response when `environment == "development"`,
+    otherwise a generic safe message — reusing the same `Settings.environment` pattern from
+    Milestone 3's logging.
+- **What got built:** `app/schemas/errors.py` (`ErrorDetail`, `ErrorResponse`), `app/schemas/
+  health.py` (`HealthResponse`, replacing `/health`'s old raw `dict[str, str]` return), `app/core/
+  middleware.py` (`RequestLoggingMiddleware` — assigns a `request_id`, times the request, logs
+  method/path/status/duration, echoes the ID back as an `X-Request-ID` header), `app/core/
+  exceptions.py` (three handlers: validation/422, HTTP/varies, unhandled/500), an empty
+  `v1_router` in `app/routers/__init__.py` (no routes yet — ready for Milestone 10+), all wired
+  together in `main.py`.
+- **A real bug found during verification, not just written and assumed correct:** the 404 handler
+  initially didn't fire for "no matching route" errors. Cause: those are raised internally as
+  Starlette's *base* `HTTPException`, while the handler was registered against `fastapi.
+  HTTPException` (a subclass) — a handler on the narrower subclass doesn't catch instances of the
+  broader base class. Fixed by registering against Starlette's base `HTTPException` instead,
+  which (via the exception's MRO) catches both the base-class routing errors and any
+  `fastapi.HTTPException` raised in application code.
+- **A second, smaller fix:** mypy strict initially rejected `app.add_exception_handler(...)`
+  calls (the handler functions' specific exception-subclass parameter types didn't match the
+  method's declared generic `Exception` signature) — switched to the `app.exception_handler(...)`
+  decorator form (applied directly to the imported functions, not as an inline decorator) instead,
+  which mypy accepts cleanly.
+- **Honest limitation:** the validation-error (422) handler is wired and type-checks, but couldn't
+  be exercised end-to-end yet — no current endpoint takes any parameters to invalidate. Its first
+  real test will be whichever endpoint Milestone 10 adds.
+- **Verified working:** `ruff check`, `ruff format --check`, and `mypy --strict` all pass clean.
+  Manually verified end-to-end against a running server: `GET /health` still works (now backed by
+  `HealthResponse`); a nonexistent path returns the standardized error shape with a `request_id`;
+  temporarily forcing `/health` to raise confirmed the 500 path also returns the standardized
+  shape, includes the real exception message in development mode, and logs the full traceback
+  server-side — then the temporary change was reverted and re-verified clean.
 
 ### Milestone 8 — Continuous Integration (complete)
 
@@ -366,6 +427,22 @@ Full mentor workflow (Phases 1–7) was followed end to end. Summary for future 
   so far), while still working if that changes later. CI checks are **broader than the roadmap's
   literal list**: Ruff, mypy `--strict`, ESLint, `tsc --noEmit`, and Prettier's format check — the
   same set run locally, not a narrower CI-only subset.
+- **Working agreement, starting Milestone 10 (2026-07-10):** across Milestones 3–9, Claude wrote
+  100% of the actual code every milestone — the user made real decisions and asked deep
+  conceptual questions, but never wrote pseudocode or implementation themselves. This was never a
+  deliberate plan, just default momentum, and the user caught it and asked to change it. From
+  Milestone 10 onward: **the user writes pseudocode (Phase 3) and the actual application/business
+  logic implementation (Phase 4)** — routes, models, exception handlers, middleware, components,
+  hooks, service functions. Claude's role narrows to configuration/tooling work (dependency
+  installs, config files, CI, environment/`Settings` wiring) plus Phases 1, 5, 6, 7 (explaining
+  the milestone, reviewing the user's code, suggesting refactors, sign-off/doc updates) and git
+  operations when asked. **Refinement on Phase 2 (edge cases):** for *technical/infrastructure*
+  edge cases (version compatibility, environment/network issues, driver quirks), Claude still
+  surfaces these directly, same as before. For *logical/behavioral* edge cases — what the
+  implementation should actually do in a given scenario — the user wants to actively participate
+  in identifying them, not just receive a pre-made list to confirm. If it's ambiguous whether
+  something is "logic" or "config" (e.g., is a SQLAlchemy model class logic or schema config?),
+  ask rather than assume.
 
 ## Current Architecture
 
@@ -380,14 +457,19 @@ fetching yet (later milestones) — `hooks/` and `theme/typography.ts` from
 `docs/02-system-architecture.md` §13 don't exist yet. ESLint (flat config + `eslint-config-expo`)
 and Prettier (+ `prettier-plugin-tailwindcss`) are configured and passing clean.
 
-**Backend** — FastAPI scaffold complete. `app/main.py` wires settings → logging → app → routers.
-`core/` holds `config.py` (Pydantic Settings, fail-fast, reads `.env`, `extra="ignore"` for
-not-yet-wired reserved vars) and `database.py` (SQLAlchemy `engine`/`SessionLocal`/`Base`/
-`TimestampMixin`/`get_db`) and `logging.py`. `routers/` holds `health.py` (`GET /health`, now
-verifies DB connectivity via a real query). `models/` holds all 7 SQLAlchemy model classes.
-`services/`, `schemas/`, `utils/` still empty, awaiting later milestones. Ruff (lint + format) and
-mypy `--strict` are configured via `pyproject.toml` and passing clean; `alembic/versions/`
-excluded from linting (generated, historical files).
+**Backend** — FastAPI scaffold complete. `app/main.py` wires settings → logging → middleware →
+exception handlers → routers. `core/` holds `config.py` (Pydantic Settings, fail-fast, reads
+`.env`, `extra="ignore"` for not-yet-wired reserved vars), `database.py` (SQLAlchemy `engine`/
+`SessionLocal`/`Base`/`TimestampMixin`/`get_db`), `middleware.py` (`RequestLoggingMiddleware`),
+`exceptions.py` (validation/HTTP/unhandled exception handlers), and `logging.py`. `routers/`
+holds `health.py` (`GET /health`, unversioned, verifies DB connectivity via a real query) and an
+empty `v1_router` (ready for future versioned endpoints, no routes yet). `models/` holds all 7
+SQLAlchemy model classes. `schemas/` holds `errors.py` (`ErrorDetail`/`ErrorResponse`) and
+`health.py` (`HealthResponse`) — no longer empty as of Milestone 9, ahead of its "Milestone 14+"
+placeholder comment, same pattern as the Milestone 6/7 overlaps. `services/`, `utils/` still
+empty, awaiting later milestones. Ruff (lint + format) and mypy `--strict` are configured via
+`pyproject.toml` and passing clean; `alembic/versions/` excluded from linting (generated,
+historical files).
 
 **Database** — Supabase PostgreSQL, project created and live (Milestone 6). All 7 core tables
 exist: `briefings`, `economic_events`, `enriched_events`, `fred_series`, `news_articles`,
@@ -460,10 +542,12 @@ walris/
         __init__.py
         config.py                (now reads database_url, extra="ignore")
         database.py               (engine, SessionLocal, Base, TimestampMixin, get_db)
+        middleware.py              (RequestLoggingMiddleware — request_id, timing, logging)
+        exceptions.py              (validation/HTTP/unhandled exception handlers)
         logging.py
       routers/
-        __init__.py
-        health.py                 (now checks DB connectivity)
+        __init__.py                (v1_router — empty, ready for future versioned endpoints)
+        health.py                 (unversioned; checks DB connectivity; uses HealthResponse)
       models/
         __init__.py                (imports all 7 models for Base.metadata)
         briefing.py
@@ -473,8 +557,11 @@ walris/
         news_article.py
         device_token.py
         job_run.py
+      schemas/
+        __init__.py              (exports ErrorDetail, ErrorResponse, HealthResponse)
+        errors.py                (ErrorDetail, ErrorResponse — the standard error envelope)
+        health.py                (HealthResponse)
       services/__init__.py     (empty — Milestone 12+)
-      schemas/__init__.py      (empty — Milestone 14+)
       utils/__init__.py        (empty — nothing needed yet)
   docs/
     01-product-requirements.md
@@ -484,6 +571,7 @@ walris/
     05-engineering-journal.md
     06-resume-prompt.md
     07-learning-notes.md
+    08-code-reference-milestones-3-6-9.md
 ```
 
 ## Key Files Created
@@ -522,6 +610,18 @@ walris/
 - `backend/app/routers/health.py` — `GET /health` now runs a real `SELECT 1` through the DB
 - `.github/workflows/ci.yml` — GitHub Actions: Ruff/mypy (backend) + ESLint/tsc/Prettier (mobile)
   on push to `main` and on pull requests; verified passing on a real run, not just written
+- `backend/app/schemas/errors.py`, `backend/app/schemas/health.py` — the standardized error
+  envelope (`ErrorDetail`/`ErrorResponse`) and `/health`'s response model
+- `backend/app/core/middleware.py` — `RequestLoggingMiddleware` (per-request `request_id`, timing,
+  logging, `X-Request-ID` response header)
+- `backend/app/core/exceptions.py` — validation/HTTP/unhandled exception handlers, all producing
+  the standardized error shape; registered against Starlette's base `HTTPException`, not
+  `fastapi.HTTPException` (see Milestone 9 notes for why that distinction mattered)
+- `backend/app/routers/__init__.py` — empty `v1_router`, the real infrastructure for API
+  versioning, ready for Milestone 10+'s first real endpoint
+- `docs/08-code-reference-milestones-3-6-9.md` — snapshot of the actual code from the three
+  milestones that involved real logic (not just config), for study — not a template to copy
+  forward now that the user writes implementation starting Milestone 10
 
 ## Known Issues
 
@@ -616,7 +716,9 @@ EXPO_PUBLIC_API_BASE_URL
 
 ## Next Steps
 
-1. Begin Milestone 9 — API Foundation: API versioning, standardized error responses, response
-   models, logging middleware, request validation, global exception handling.
-2. Begin Milestone 10 — First End-to-End Connection.
-3. Begin Milestones 11–26 — Core Backend (Part 2).
+1. Begin Milestone 10 — First End-to-End Connection: mobile calls `GET /health` via TanStack
+   Query, displays "Backend Connected / Status: Healthy," handles loading/error/success states.
+   **User writes the pseudocode and implementation this time** — see Important Decisions.
+2. Begin Milestones 11–26 — Core Backend (Part 2) — where real Walris-specific business logic
+   (briefing generation, external API integrations) actually begins.
+3. Begin Milestones 27–40 — Mobile App (Part 3).

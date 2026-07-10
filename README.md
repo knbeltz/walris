@@ -39,6 +39,7 @@ Full documentation lives in [`docs/`](docs/):
 - [`05-engineering-journal.md`](docs/05-engineering-journal.md) — running engineering journal (living document)
 - [`06-resume-prompt.md`](docs/06-resume-prompt.md) — current project status, for resuming work
 - [`07-learning-notes.md`](docs/07-learning-notes.md) — concepts and debugging lessons worth remembering (living document)
+- [`08-code-reference-milestones-3-6-9.md`](docs/08-code-reference-milestones-3-6-9.md) — snapshot of the code Claude wrote for Milestones 3/6/9, for study (not a template to copy forward — see the working agreement in `06-resume-prompt.md`)
 
 ## Status
 
