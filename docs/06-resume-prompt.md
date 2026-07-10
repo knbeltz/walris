@@ -1,7 +1,7 @@
 # Walris Resume Prompt
 
 **Document:** docs/06-resume-prompt.md
-**Last Updated:** 2026-07-09 (Milestone 4 complete)
+**Last Updated:** 2026-07-09 (Milestone 5 complete)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -15,7 +15,9 @@ Walris exists as a GitHub repository with a scaffolded folder layout, complete p
 documentation, a minimal but working FastAPI backend (`uvicorn app.main:app --reload` starts
 successfully; `GET /health` returns HTTP 200), and a minimal but working Expo mobile app (Expo
 Router + NativeWind + React Native Reusables + TanStack Query, verified launching via Expo Go on
-a physical iPhone). No real screens/data fetching exist yet — that's later milestones.
+a physical iPhone). Both apps now have linting/formatting/type-checking tooling standardized
+(Ruff + strict mypy on backend; ESLint + Prettier on mobile) and `.env.example` files documenting
+required configuration. No real screens/data fetching exist yet — that's later milestones.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -26,7 +28,7 @@ a physical iPhone). No real screens/data fetching exist yet — that's later mil
 - [x] **Milestone 2 — Documentation Foundation**
 - [x] **Milestone 3 — Backend Foundation**
 - [x] **Milestone 4 — React Native Foundation**
-- [ ] Milestone 5 — Development Environment
+- [x] **Milestone 5 — Development Environment**
 - [ ] Milestone 6 — Supabase Setup
 - [ ] Milestone 7 — Configuration System
 - [ ] Milestone 8 — Continuous Integration
@@ -38,16 +40,61 @@ a physical iPhone). No real screens/data fetching exist yet — that's later mil
 
 ## Current Milestone
 
-**Milestone 5 — Development Environment** (not started)
+**Milestone 6 — Supabase Setup** (not started)
 
-- Goal: Standardize local dev tooling. Backend: Ruff, Black, mypy. Frontend: ESLint, Prettier,
-  TypeScript strict mode (already on by default from the Expo template, per Milestone 4 — just
-  needs ESLint/Prettier added around it). Create `backend/.env.example` and
-  `mobile/.env.local.example`.
+- Goal: Create the Supabase project, configure the local connection, create a migration system,
+  and create the initial tables (`briefings`, `economic_events`, `enriched_events`, `fred_series`,
+  `news_articles`, `device_tokens`, `job_runs`).
 - Progress: Not started.
-- **Resume here:** Phase 1 (Understand the Milestone) for Milestone 5, following the same
-  mentor workflow used for Milestones 3–4 (understand → edge cases → pseudocode → implementation →
+- **Resume here:** Phase 1 (Understand the Milestone) for Milestone 6, following the same
+  mentor workflow used for Milestones 3–5 (understand → edge cases → pseudocode → implementation →
   review → refactor → sign off).
+
+### Milestone 5 — Development Environment (complete)
+
+Full mentor workflow (Phases 1–7) was followed end to end, same as Milestones 3–4.
+
+- **Decisions made (with reasoning, in case they need revisiting):**
+  - **Ruff alone, not Ruff + Black**, for backend linting *and* formatting. The roadmap listed
+    both, but Ruff's built-in formatter (`ruff format`) is Black-compatible, so running both is
+    two tools doing overlapping jobs with no real functional gain on a fresh project. One tool,
+    one config, one command for each job.
+  - **mypy `--strict` starting now**, not ratcheted up later. This wasn't really optional scope —
+    `docs/02-system-architecture.md` §16 already mandates full backend typing as an architecture
+    requirement, so strict mode just enforces a decision already made. Cheapest time to adopt it
+    is while the codebase is four small files, not after it's grown.
+  - **Wired up real `.env` file loading** in `Settings` (`SettingsConfigDict(env_file=".env")`)
+    rather than just creating `.env.example` per the roadmap's literal wording — an example file
+    with nothing that reads it felt hollow, so this closes that gap now instead of leaving it for
+    later.
+  - **`prettier-plugin-tailwindcss`** added per your go-ahead, since the mobile app leans heavily
+    on NativeWind `className` strings.
+- **What got built:**
+  - Backend: `backend/pyproject.toml` (Ruff broad rule set — pyflakes, pycodestyle, isort,
+    pyupgrade, bugbear, comprehensions, simplify; mypy strict + `pydantic.mypy` plugin, scoped to
+    `app/`), `backend/requirements-dev.txt` (split from runtime `requirements.txt`),
+    `backend/.env.example` (documents the full eventual variable set from
+    `docs/02-system-architecture.md` §25, noting which are actually read by `Settings` today vs.
+    reserved for later milestones).
+  - Mobile: ESLint (flat config + `eslint-config-expo`, scaffolded via `npx expo lint`), Prettier +
+    `prettier-plugin-tailwindcss` + `eslint-config-prettier` (prevents ESLint and Prettier fighting
+    over formatting rules), `lint`/`format`/`format:check` npm scripts, `mobile/.env.local.example`.
+  - Cleanup: while touching backend files for the `.env` wiring, removed stale Milestone-3
+    pseudocode/TODO comments that had been left describing already-finished work as still-to-do
+    (in `config.py`, `logging.py`, `main.py`, `health.py`); also added a missing return type
+    annotation on the health route and simplified an `if`/`else` to a ternary per Ruff's own
+    suggestion.
+- **Real problems hit and fixed along the way:**
+  - `npx expo lint`'s first run installed ESLint + `eslint-config-expo`, then immediately tried to
+    `require('eslint')` in the same process and failed with "Cannot find module 'eslint'" — a
+    timing quirk (Node's resolution hadn't caught up with the just-finished install), not a real
+    config problem. Re-running the exact same command once the install had finished worked fine.
+  - All ten mobile files written before Prettier existed needed reformatting once Prettier was
+    added — expected, not a bug; `prettier --write .` fixed it in one pass.
+- **Verified working:** `ruff check`, `ruff format --check`, and `mypy` all pass clean on backend;
+  `uvicorn app.main:app --reload` + `GET /health` still work after the config/logging/health.py
+  edits. `npm run lint`, `npm run format:check`, `npx tsc --noEmit`, and `npx expo-doctor`
+  (18/18) all pass clean on mobile.
 
 ### Milestone 4 — React Native Foundation (complete)
 
@@ -147,6 +194,10 @@ Full mentor workflow (Phases 1–7) was followed end to end. Summary for future 
   NativeWind's own docs test against SDK 54 and it avoided an internal Expo dependency conflict
   present on SDK 57 (see Milestone 4 notes above). Re-evaluate the SDK version deliberately before
   ever bumping it — don't just take whatever `npx create-expo-app` defaults to.
+- Backend uses **Ruff alone** for both linting and formatting, not Ruff + Black — Ruff's built-in
+  formatter is Black-compatible, so running both is redundant (see Milestone 5 notes).
+- Backend mypy runs in **`--strict`** mode from the start, not ratcheted up gradually — this
+  enforces the full-typing requirement `docs/02-system-architecture.md` §16 already mandates.
 
 ## Current Architecture
 
@@ -158,12 +209,14 @@ Reusables primitives (`button`, `card`, `badge`, `separator`, `text`). `lib/` ho
 NativeWind (Tailwind-style `className`) with Walris's actual design-system colors wired through
 `global.css` → `tailwind.config.js`. No custom fonts loaded yet (deferred), no real screens/data
 fetching yet (later milestones) — `hooks/` and `theme/typography.ts` from
-`docs/02-system-architecture.md` §13 don't exist yet.
+`docs/02-system-architecture.md` §13 don't exist yet. ESLint (flat config + `eslint-config-expo`)
+and Prettier (+ `prettier-plugin-tailwindcss`) are configured and passing clean.
 
 **Backend** — FastAPI scaffold complete. `app/main.py` wires settings → logging → app → routers.
-`core/` holds `config.py` (Pydantic Settings, fail-fast) and `logging.py`. `routers/` holds
-`health.py` (`GET /health`). `services/`, `schemas/`, `models/`, `utils/` exist as empty packages
-awaiting later milestones. No database, no external API integrations yet.
+`core/` holds `config.py` (Pydantic Settings, fail-fast, now reads `.env`) and `logging.py`.
+`routers/` holds `health.py` (`GET /health`). `services/`, `schemas/`, `models/`, `utils/` exist as
+empty packages awaiting later milestones. No database, no external API integrations yet. Ruff
+(lint + format) and mypy `--strict` are configured via `pyproject.toml` and passing clean.
 
 **Database** — Supabase PostgreSQL. No project created yet (Milestone 6). Planned tables:
 `briefings`, `economic_events`, `enriched_events`, `fred_series`, `news_articles`,
@@ -190,6 +243,10 @@ walris/
     global.css                (Walris color tokens as CSS variables)
     components.json           (React Native Reusables config)
     nativewind-env.d.ts
+    eslint.config.js           (flat config: eslint-config-expo + eslint-config-prettier)
+    .prettierrc                (+ prettier-plugin-tailwindcss)
+    .prettierignore
+    .env.local.example
     app/
       _layout.tsx              (SafeAreaProvider > QueryClientProvider > ThemeProvider > Stack > PortalHost)
       index.tsx                 (placeholder home screen)
@@ -207,7 +264,10 @@ walris/
   backend/
     README.md
     requirements.txt
-    .venv/                     (gitignored; fastapi, uvicorn, pydantic-settings installed)
+    requirements-dev.txt       (-r requirements.txt, ruff, mypy)
+    pyproject.toml             (Ruff lint+format config, mypy strict config)
+    .env.example
+    .venv/                     (gitignored; fastapi, uvicorn, pydantic-settings, ruff, mypy installed)
     app/
       __init__.py
       main.py
@@ -252,6 +312,12 @@ walris/
   judgment calls made where the design doc didn't specify a value)
 - `mobile/components/ui/` — React Native Reusables primitives (button, card, badge, separator, text)
 - `mobile/lib/utils.ts`, `mobile/lib/queryClient.ts` — cn helper and TanStack Query client
+- `backend/pyproject.toml` — Ruff (broad rule set, lint + format) and mypy (`--strict` +
+  `pydantic.mypy` plugin) config
+- `backend/requirements-dev.txt`, `backend/.env.example` — dev tooling deps and the documented
+  full environment variable shape
+- `mobile/eslint.config.js`, `mobile/.prettierrc`, `mobile/.prettierignore`,
+  `mobile/.env.local.example` — mobile linting/formatting config and env var template
 
 ## Known Issues
 
@@ -268,10 +334,7 @@ walris/
   watchfiles) all installed cleanly with prebuilt 3.14 wheels. Worth re-checking if a future
   milestone (e.g. SQLAlchemy/Alembic in Milestone 11, or a DB driver) hits a wheel gap, but no
   action needed for now.
-- No `.env.example` / `.env.local.example` yet — those are Milestone 5 deliverables. Backend
-  `Settings` currently has no `.env` file support wired up (no `SettingsConfigDict(env_file=...)`)
-  since there's no `.env` file yet to read from.
-- No tests, CI, or linting configured yet — Milestones 5 and 8.
+- No tests or CI configured yet — Milestone 8. Linting/formatting (Milestone 5) is done.
 - No Xcode or Android Studio installed on this machine (only Xcode Command Line Tools) — no iOS
   Simulator or Android emulator available. Mobile verification happens via Expo Go on a physical
   iPhone 17 Pro instead. Fine for now; would need addressing before any native-build-only feature
@@ -312,7 +375,10 @@ alembic upgrade head
 
 ## Environment Variables
 
-Not yet created. Per `docs/02-system-architecture.md` §25, will eventually need:
+`backend/.env.example` and `mobile/.env.local.example` exist (Milestone 5); copy them to `.env` /
+`.env.local` and fill in real values as each variable's owning milestone lands. Only `ENVIRONMENT`
+is actually read by code today (`Settings` in `backend/app/core/config.py`) — the rest are
+reserved. Per `docs/02-system-architecture.md` §25, the full eventual set is:
 
 Backend (`backend/.env`):
 
@@ -337,10 +403,8 @@ EXPO_PUBLIC_API_BASE_URL
 
 ## Next Steps
 
-1. Begin Milestone 5 — Development Environment: add Ruff/Black/mypy for backend and
-   ESLint/Prettier for mobile (TypeScript strict mode is already on from the Expo template), plus
-   `backend/.env.example` and `mobile/.env.local.example`.
-2. Begin Milestone 6 — Supabase Setup: create the Supabase project, configure the connection, and
-   create the initial tables (`briefings`, `economic_events`, `enriched_events`, `fred_series`,
-   `news_articles`, `device_tokens`, `job_runs`).
-3. Begin Milestone 7 — Configuration System.
+1. Begin Milestone 6 — Supabase Setup: create the Supabase project, configure the connection,
+   create a migration system, and create the initial tables (`briefings`, `economic_events`,
+   `enriched_events`, `fred_series`, `news_articles`, `device_tokens`, `job_runs`).
+2. Begin Milestone 7 — Configuration System.
+3. Begin Milestone 8 — Continuous Integration.
