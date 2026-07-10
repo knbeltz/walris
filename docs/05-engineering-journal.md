@@ -7,53 +7,21 @@
 
 ---
 
-## Purpose
-
-The Engineering Journal is a running record of what was built, what was learned, what decisions
-were made, and what problems were encountered while developing Walris.
-
-This document should be updated after every meaningful development session.
-
-The goal is not perfection.
-
-The goal is to build the habit of thinking like an engineer.
-
-## Why This Matters
-
-Walris is not only a product project.
-
-It is also a learning project.
-
-The Engineering Journal helps track:
-
-- Technical decisions
-- Bugs encountered
-- Debugging process
-- Architecture tradeoffs
-- Claude Code interactions
-- Lessons learned
-- Questions to revisit
-- Refactoring opportunities
-
-Over time, this journal becomes evidence of engineering growth.
-
-## How to Use This Journal
-
-After each development session, spend 10–15 minutes writing an entry.
-
-Each entry should answer:
-
-- What was I trying to accomplish?
-- What did I build?
-
-Do not write vague notes.
-
-Write enough detail that future-you can understand what happened.
-
-## Journal Entry Template
+## Entry Template
 
 ```markdown
-## Entry 1 — 7/8/26
+## Entry [N] — YYYY-MM-DD
+
+### Session Goal
+
+
+
+### Work Completed
+
+-
+```
+
+## Entry 1 — 2026-07-08
 
 ### Session Goal
 
@@ -65,99 +33,35 @@ Set up the FastAPI app: initial config, logger, and health router.
 - Implemented `configure_logging`, which sets DEBUG-level logs in development and INFO-level logs in production.
 - Created a health router returning `{"status": "ok"}` on `GET /health` with an HTTP 200 response.
 - Wired settings, logging, and the health router together in `main.py`, creating the FastAPI app instance.
-```
 
-## Example Entry
+## Entry 2 — 2026-07-09
 
-> The entry below is an illustrative example only — not a real journal entry. Real entries must
-> be written by the developer, not generated on their behalf.
+### Session Goal
 
-### Entry 1 — YYYY-MM-DD
+Set up the frontend configuration which include routing, styling, component libraries, and data fetching as well as the backend tooling. 
 
-#### Session Goal
 
-Set up the initial Walris repository structure and create the `mobile`, `backend`, and `docs`
-directories.
+### Work Completed
 
-#### Work Completed
+Routing: 
+- expo-router: Turns app/ folder into screen list so that a manual navigation set up is not needed. 
 
-- Created the root `walris` repository.
-- Added `mobile/`, `backend/`, and `docs/`.
-- Added initial documentation files.
-- Initialized Git and pushed the first commit to GitHub.
+- expo-linking, expo-constants, expo-status-bar: Small support pacakges. 
 
-#### Technical Decisions Made
+- react-native-screens, react-native-safe-area-context: Make navigation utilize native, GPU-backed containers instead of plain views, and let screens know where the notch/home-indicator safe zones are. 
 
-- Decided to keep mobile and backend in one monorepo.
-- Decided to keep documentation in version control.
-- Decided to use FastAPI for backend and Expo for mobile.
 
-#### Bugs / Problems Encountered
+Styling: 
+- nativewind: Lets you write classnames on React Native components. Nativewind compiles those class names into real styles at build time (React Native has no CSS engine on its own). 
 
-- I was initially unsure whether to use separate repositories for mobile and backend.
-- I also needed to decide whether documentation should live in Notion or GitHub.
+- tailwindcss: Underlying utility class system NativeWind is built on 
 
-#### How I Debugged
+- react-native-reanimated + react-native-worklets: ANimation library NativeWind relies on internally, plus its own required companion package. 
 
-- Compared monorepo vs multi-repo tradeoffs.
-- Chose monorepo because the project is solo-developed and easier to manage in one place.
+- tailwindcss-animate: Adds animation-related utility classes (fade, slide, etc.) to Tailwind's vocabulary. 
 
-#### What I Learned
+Component library (React Native Reusables)
 
-- A clean folder structure reduces future confusion.
-- Documentation should live close to the code because product and engineering decisions change
-  as implementation evolves.
-
-#### Claude Code Notes
-
-Claude Code helped explain the purpose of each folder.
-
-I made the final decision to use a monorepo.
-
-#### Questions / Confusions
-
-- How detailed should each documentation file become before coding?
-- Should deployment config live at the root or inside each app?
-
-#### Next Steps
-
-- Scaffold the FastAPI backend.
-- Scaffold the Expo mobile app.
-- Add `.env.example` files.
-- Configure formatting and linting.
-
-## Engineering Reflection Prompts
-
-Use these when you are stuck or after a difficult session.
-
-### Architecture Reflection
-
-- Did I put this logic in the right layer?
-- Should this belong in the frontend, backend, database, or external service?
-- Will this still make sense when the app grows?
-
-### Debugging Reflection
-
-- What did I expect to happen?
-- What actually happened?
-- What changed recently?
-- What is the smallest reproducible version of the bug?
-- What logs or errors give me evidence?
-
-### AI Tutor Reflection
-
-- Did I understand the code Claude gave me?
-- Could I explain it back in my own words?
-- Did I ask for hints before asking for the answer?
-- Did I review the code before accepting it?
-- Did I test the code myself?
-
-### Product Reflection
-
-- Does this feature help users understand the economy faster?
-- Am I building something users need now or something I personally find interesting?
-- Is this necessary for V1?
-- Can this be deferred?
 
 ## Decision Log
 
@@ -221,155 +125,3 @@ iOS and Android push workflows.
 
 **Tradeoff**: Future advanced notification logic may require deeper native or provider-specific
 configuration.
-
-## Technical Debt Log
-
-Use this section to track shortcuts or deferred improvements.
-
-```markdown
-## Debt Item [Number] — [Title]
-
-### Description
-
-What shortcut was taken?
-
-### Why It Was Acceptable
-
-Why was this okay for now?
-
-### Risk
-
-What could happen if this is ignored?
-
-### Future Fix
-
-How should this be resolved later?
-```
-
-## Bug Log
-
-Use this section for significant bugs.
-
-```markdown
-## Bug [Number] — [Title]
-
-### Date Found
-
-YYYY-MM-DD
-
-### Description
-
-What happened?
-
-### Expected Behavior
-
-What should have happened?
-
-### Actual Behavior
-
-What actually happened?
-
-### Root Cause
-
-What caused it?
-
-### Fix
-
-How was it fixed?
-
-### Lesson
-
-What did this teach me?
-```
-
-## Claude Code Session Template
-
-Use this before starting a Claude Code session.
-
-```markdown
-## Claude Code Session — [Date]
-
-### Milestone
-
-Which roadmap milestone am I working on?
-
-### Context to Provide Claude
-
-- Relevant docs:
-- Relevant files:
-- Current bug or task:
-- Constraints:
-- What I want to learn:
-
-### Prompt
-
-[Paste the exact Claude Code prompt used]
-
-### Output Review
-
-Did I understand the output?
-
-Did the code follow the architecture?
-
-Did it introduce unnecessary complexity?
-
-Did it use correct types?
-
-Did it require tests?
-
-### Follow-Up Actions
-
--
--
--
-```
-
-## Weekly Review Template
-
-Use this once per week.
-
-```markdown
-## Weekly Review — Week of [Date]
-
-### What I Built This Week
-
--
--
--
-
-### Biggest Technical Lesson
-
-### Biggest Product Lesson
-
-### Biggest Challenge
-
-### What I Avoided or Deferred
-
-### Quality of My Code This Week
-
-Rate 1–10:
-
-Why?
-
-### Quality of My Understanding This Week
-
-Rate 1–10:
-
-Why?
-
-### Next Week Priorities
-
-1.
-2.
-3.
-```
-
-## Final Rule
-
-This journal is not for performative note-taking.
-
-It is for becoming a better engineer.
-
-Every entry should help future-you answer:
-
-> What did I learn while building Walris?
