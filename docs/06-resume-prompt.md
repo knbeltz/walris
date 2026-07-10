@@ -1,7 +1,7 @@
 # Walris Resume Prompt
 
 **Document:** docs/06-resume-prompt.md
-**Last Updated:** 2026-07-09 (Milestone 5 complete)
+**Last Updated:** 2026-07-10 (Milestone 6 complete)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -17,7 +17,9 @@ successfully; `GET /health` returns HTTP 200), and a minimal but working Expo mo
 Router + NativeWind + React Native Reusables + TanStack Query, verified launching via Expo Go on
 a physical iPhone). Both apps now have linting/formatting/type-checking tooling standardized
 (Ruff + strict mypy on backend; ESLint + Prettier on mobile) and `.env.example` files documenting
-required configuration. No real screens/data fetching exist yet — that's later milestones.
+required configuration. The backend now has a real Supabase Postgres database behind it — all
+seven core tables exist, migrations run through Alembic, and `GET /health` proves connectivity
+with a real query. No real screens/data fetching exist yet — that's later milestones.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -29,7 +31,7 @@ required configuration. No real screens/data fetching exist yet — that's later
 - [x] **Milestone 3 — Backend Foundation**
 - [x] **Milestone 4 — React Native Foundation**
 - [x] **Milestone 5 — Development Environment**
-- [ ] Milestone 6 — Supabase Setup
+- [x] **Milestone 6 — Supabase Setup**
 - [ ] Milestone 7 — Configuration System
 - [ ] Milestone 8 — Continuous Integration
 - [ ] Milestone 9 — API Foundation
@@ -40,15 +42,107 @@ required configuration. No real screens/data fetching exist yet — that's later
 
 ## Current Milestone
 
-**Milestone 6 — Supabase Setup** (not started)
+**Milestone 7 — Configuration System** (not started)
 
-- Goal: Create the Supabase project, configure the local connection, create a migration system,
-  and create the initial tables (`briefings`, `economic_events`, `enriched_events`, `fred_series`,
-  `news_articles`, `device_tokens`, `job_runs`).
-- Progress: Not started.
-- **Resume here:** Phase 1 (Understand the Milestone) for Milestone 6, following the same
-  mentor workflow used for Milestones 3–5 (understand → edge cases → pseudocode → implementation →
+- Goal per the roadmap: centralize config (API keys, database URL, environment, secrets) via
+  environment variables, with Pydantic validation and graceful fail-fast on missing required
+  vars.
+- **Heads up before starting:** this overlaps substantially with what already exists. `Settings`
+  (`backend/app/core/config.py`) already validates `database_url` and `environment` via Pydantic
+  `BaseSettings` with fail-fast behavior (raises at import time if required fields are missing —
+  established in Milestone 3, extended in Milestone 6). The real remaining work is likely just
+  adding `Settings` fields for the API keys as their respective milestones need them (Finnhub,
+  FRED, Marketaux, OpenAI, Expo push, admin secret), not building the validation mechanism itself.
+  Worth a deliberate scope check in Phase 1 rather than assuming from the roadmap's wording alone
+  — this is the second milestone in a row (after the Milestone 6/11 overlap) where the roadmap's
+  literal text undersells how much is already done.
+- **Resume here:** Phase 1 (Understand the Milestone) for Milestone 7, following the same
+  mentor workflow used for Milestones 3–6 (understand → edge cases → pseudocode → implementation →
   review → refactor → sign off).
+
+### Milestone 6 — Supabase Setup (complete)
+
+Full mentor workflow (Phases 1–7) was followed end to end, same as Milestones 3–5. This was the
+first milestone involving an external service (an actual account/project on Supabase's website,
+under the user's own credentials) rather than pure local scaffolding — a real workflow shift worth
+remembering for Milestone 12+ (Finnhub/FRED/Marketaux/OpenAI all involve the same pattern).
+
+- **Decisions made (with reasoning):**
+  - **Sync SQLAlchemy**, not async — the backend is mostly a once-a-day scheduled job plus light
+    read traffic, not a high-concurrency service, so async's benefit (juggling many concurrent
+    waits) doesn't apply yet, while its complexity cost (`async`/`await` threaded through every
+    DB call) would apply immediately.
+  - **UUID primary keys**, not auto-incrementing integers — matches Supabase convention, avoids
+    leaking row counts, and allows generating IDs before insert (useful for related rows created
+    together).
+  - **`psycopg` (v3)**, not `psycopg2-binary` — more actively maintained, and confirmed to have
+    prebuilt Python 3.14 wheels (checked before committing to it, same caution as Milestone 3's
+    Python-version check).
+  - **Direct connection was the original plan, but doesn't work from this network** — Supabase's
+    direct-connection hostname is IPv6-only, and this machine only has a link-local (non-routable)
+    IPv6 address. Switched to the **Session pooler** instead (not Transaction pooler — Session
+    preserves per-connection state, which Transaction pooling breaks for some migration
+    operations). If this machine ever gets real IPv6 connectivity or moves networks, direct
+    connection could be reconsidered, but Session pooler has no real downside for this app's shape.
+  - **`--radius` and column types**: see "What got built" below.
+  - Decided to build the actual SQLAlchemy model classes now rather than deferring to Milestone 11
+    (see Important Decisions) — Alembic's autogenerate requires the models to exist to diff
+    against, so there was no way to satisfy Milestone 6's "create migration system" deliverable
+    without them.
+- **What got built:** `backend/app/core/database.py` (`engine`, `SessionLocal`, `Base`,
+  `TimestampMixin`, `get_db` FastAPI dependency); seven SQLAlchemy model classes in
+  `backend/app/models/` (`Briefing`, `EconomicEvent`, `EnrichedEvent`, `FredSeries`,
+  `NewsArticle`, `DeviceToken`, `JobRun`) matching `docs/02-system-architecture.md` §12's column
+  lists, with `timestamptz` timestamps, JSONB for free-form fields (`affected_groups`, `entities`,
+  `topics`, `data_points`, `job_metadata`), cascade-delete on the `briefing → economic_events →
+  enriched_events/fred_series/news_articles` relationships, and a unique constraint on
+  `briefing_date` (V1 generates one briefing per day). Alembic initialized in `backend/alembic/`,
+  configured to reuse the app's own `engine` (see the debugging note below for why this matters).
+  One reviewed migration (`b9a040b66e1e_create_initial_tables.py`) applied to the real Supabase
+  database. `GET /health` extended to run a real `SELECT 1` through a DB session.
+- **Judgment calls made where the design doc doesn't specify a value:** `status` fields
+  (`briefings`, `job_runs`) are plain `String`, not a Postgres `ENUM` — enums are painful to alter
+  later, and a plain string is more forgiving while the schema is still young. Numeric values
+  (`actual_value`, `latest_value`, etc.) are `Float`, not `Numeric`/decimal — these are display
+  values, not currency needing exact decimal arithmetic. The `--radius` base was derived directly
+  from the design doc's own Button/Input (8px) and Card/Modal (12px) values, not guessed.
+- **The authentication debugging saga** — by far the bulk of this milestone's time. Full
+  play-by-play is worth reading once if `alembic/env.py` or `app/core/database.py` ever need
+  touching again; short version:
+  1. Direct connection failed three different ways in sequence (a special character in the
+     password broke URL parsing; SQLAlchemy defaulted to the wrong driver for Supabase's bare
+     `postgresql://` scheme; the direct-connection hostname turned out to be IPv6-only and
+     unreachable from this network). Each was a distinct, real bug, not the same thing recurring.
+  2. Switched to the Session pooler, then hit a long run of `password authentication failed`
+     errors. Several password resets in a row didn't fix it — because **the password was never
+     the problem**. That only became clear by testing raw `psycopg` connections directly
+     (bypassing SQLAlchemy entirely), which succeeded consistently, proving the credentials were
+     fine and the bug was specifically in how the SQLAlchemy/Alembic path connected.
+  3. **Root cause:** `alembic/env.py`'s default template builds its own separate database engine
+     by converting the connection URL to a *string* and having a second function
+     (`engine_from_config`) re-parse that string from scratch — and something in that
+     object-to-string-and-back round-trip silently broke. Fixed by having `env.py` import and
+     reuse the exact same `engine` object `app/core/database.py` already builds, eliminating the
+     round-trip entirely (one engine, defined once, used everywhere — cleaner design regardless of
+     the bug).
+  4. Smaller fixes along the way: `Settings` needed `extra="ignore"` added (reserved-but-unused
+     `.env` vars were crashing startup — same pattern as `.env.example` documenting vars before
+     `Settings` reads them, first hit in Milestone 5, now actually triggered); Ruff needed
+     `alembic/versions/` excluded from linting (autogenerated migrations will never match hand-
+     written style, and re-fighting that on every future migration isn't worth it) and
+     `Depends()`/`Query()` allow-listed for the bugbear B008 rule (FastAPI's DI pattern requires
+     calling them in argument defaults — that's the API, not the mutable-default-argument footgun
+     the rule normally guards against).
+- **Known exposure (low-risk, already handled):** early in this milestone, a Pydantic validation
+  error printed the real `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` values into terminal
+  output. Never committed, never sent anywhere external. The database password was independently
+  reset multiple times afterward for unrelated debugging reasons, so it's a different password now
+  regardless. Nothing further needed unless the Supabase service-role key itself is a concern, in
+  which case it can be regenerated from the API Keys page.
+- **Verified working:** `ruff check`, `ruff format --check`, and `mypy --strict` all pass clean;
+  `alembic upgrade head` applied without error; all 7 tables confirmed present in Supabase via
+  direct inspection; `uvicorn app.main:app` boots and `GET /health` returns
+  `200 {"status":"ok"}` after a real round-trip through FastAPI → SQLAlchemy → Supabase Postgres.
 
 ### Milestone 5 — Development Environment (complete)
 
@@ -198,6 +292,18 @@ Full mentor workflow (Phases 1–7) was followed end to end. Summary for future 
   formatter is Black-compatible, so running both is redundant (see Milestone 5 notes).
 - Backend mypy runs in **`--strict`** mode from the start, not ratcheted up gradually — this
   enforces the full-typing requirement `docs/02-system-architecture.md` §16 already mandates.
+- Backend database access is **sync SQLAlchemy**, not async — the app's workload (a daily
+  scheduled job plus light reads) doesn't need async's concurrency benefits yet, and sync is
+  simpler to reason about while learning.
+- All tables use **UUID primary keys** (Supabase/Postgres convention), not auto-incrementing
+  integers.
+- Database connection uses Supabase's **Session pooler**, not a direct connection — this
+  machine's network can't reach Supabase's IPv6-only direct-connection hostname (see Milestone 6
+  notes). Revisit only if the network situation changes.
+- SQLAlchemy model classes for all 7 core tables were built in **Milestone 6**, not deferred to
+  Milestone 11 as the roadmap's wording might suggest — Alembic's autogenerate needs the models to
+  exist to diff against, so there was no way to do Milestone 6's migration-system deliverable
+  without them. Milestone 11 will likely be a light touch-up, not new model design.
 
 ## Current Architecture
 
@@ -213,14 +319,19 @@ fetching yet (later milestones) — `hooks/` and `theme/typography.ts` from
 and Prettier (+ `prettier-plugin-tailwindcss`) are configured and passing clean.
 
 **Backend** — FastAPI scaffold complete. `app/main.py` wires settings → logging → app → routers.
-`core/` holds `config.py` (Pydantic Settings, fail-fast, now reads `.env`) and `logging.py`.
-`routers/` holds `health.py` (`GET /health`). `services/`, `schemas/`, `models/`, `utils/` exist as
-empty packages awaiting later milestones. No database, no external API integrations yet. Ruff
-(lint + format) and mypy `--strict` are configured via `pyproject.toml` and passing clean.
+`core/` holds `config.py` (Pydantic Settings, fail-fast, reads `.env`, `extra="ignore"` for
+not-yet-wired reserved vars) and `database.py` (SQLAlchemy `engine`/`SessionLocal`/`Base`/
+`TimestampMixin`/`get_db`) and `logging.py`. `routers/` holds `health.py` (`GET /health`, now
+verifies DB connectivity via a real query). `models/` holds all 7 SQLAlchemy model classes.
+`services/`, `schemas/`, `utils/` still empty, awaiting later milestones. Ruff (lint + format) and
+mypy `--strict` are configured via `pyproject.toml` and passing clean; `alembic/versions/`
+excluded from linting (generated, historical files).
 
-**Database** — Supabase PostgreSQL. No project created yet (Milestone 6). Planned tables:
-`briefings`, `economic_events`, `enriched_events`, `fred_series`, `news_articles`,
-`device_tokens`, `job_runs`.
+**Database** — Supabase PostgreSQL, project created and live (Milestone 6). All 7 core tables
+exist: `briefings`, `economic_events`, `enriched_events`, `fred_series`, `news_articles`,
+`device_tokens`, `job_runs`. Connected via the Session pooler (not direct — see Important
+Decisions). Migrations run through Alembic (`backend/alembic/`), which reuses the app's own
+`engine` object rather than building a separate one.
 
 **External APIs** — Finnhub, FRED, Marketaux, OpenAI, Expo Notifications. None integrated yet
 (Milestones 12, 16, 18, 20, 41–45).
@@ -263,24 +374,42 @@ walris/
       queryClient.ts
   backend/
     README.md
-    requirements.txt
+    requirements.txt           (+ sqlalchemy, alembic, psycopg[binary])
     requirements-dev.txt       (-r requirements.txt, ruff, mypy)
-    pyproject.toml             (Ruff lint+format config, mypy strict config)
+    pyproject.toml             (Ruff lint+format config incl. alembic/versions exclude
+                                 and Depends()/Query() bugbear allowlist; mypy strict config)
+    .env                       (gitignored; DATABASE_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY filled in)
     .env.example
-    .venv/                     (gitignored; fastapi, uvicorn, pydantic-settings, ruff, mypy installed)
+    .venv/                     (gitignored; fastapi, uvicorn, pydantic-settings, ruff, mypy,
+                                 sqlalchemy, alembic, psycopg installed)
+    alembic.ini
+    alembic/
+      env.py                    (reuses app.core.database.engine directly — see M6 notes)
+      script.py.mako
+      versions/
+        b9a040b66e1e_create_initial_tables.py
     app/
       __init__.py
       main.py
       core/
         __init__.py
-        config.py
+        config.py                (now reads database_url, extra="ignore")
+        database.py               (engine, SessionLocal, Base, TimestampMixin, get_db)
         logging.py
       routers/
         __init__.py
-        health.py
+        health.py                 (now checks DB connectivity)
+      models/
+        __init__.py                (imports all 7 models for Base.metadata)
+        briefing.py
+        economic_event.py
+        enriched_event.py
+        fred_series.py
+        news_article.py
+        device_token.py
+        job_run.py
       services/__init__.py     (empty — Milestone 12+)
       schemas/__init__.py      (empty — Milestone 14+)
-      models/__init__.py       (empty — Milestone 11)
       utils/__init__.py        (empty — nothing needed yet)
   docs/
     01-product-requirements.md
@@ -318,6 +447,13 @@ walris/
   full environment variable shape
 - `mobile/eslint.config.js`, `mobile/.prettierrc`, `mobile/.prettierignore`,
   `mobile/.env.local.example` — mobile linting/formatting config and env var template
+- `backend/app/core/database.py` — SQLAlchemy `engine`/`SessionLocal`/`Base`/`TimestampMixin`/
+  `get_db`; reused directly by `alembic/env.py` (important — see Milestone 6 notes on why a
+  second, separately-constructed engine caused a long debugging saga)
+- `backend/app/models/` — all 7 SQLAlchemy model classes (`Briefing`, `EconomicEvent`,
+  `EnrichedEvent`, `FredSeries`, `NewsArticle`, `DeviceToken`, `JobRun`)
+- `backend/alembic/` — migration system; one applied migration creating all 7 tables in Supabase
+- `backend/app/routers/health.py` — `GET /health` now runs a real `SELECT 1` through the DB
 
 ## Known Issues
 
@@ -367,18 +503,25 @@ npx expo start
 Scan the QR code with the Expo Go app (verified on a physical iPhone; no Xcode/Android Studio on
 this machine, so no simulator available — see Known Issues).
 
-Database (once Alembic is set up in Milestone 11):
+Database (working now, from `backend/` with the venv active):
 
 ```bash
-alembic upgrade head
+alembic upgrade head              # apply migrations
+alembic revision --autogenerate -m "description"   # generate a new migration from model changes
 ```
+
+Always read an autogenerated migration before applying it — don't trust it blindly, especially
+the first one on a new table.
 
 ## Environment Variables
 
 `backend/.env.example` and `mobile/.env.local.example` exist (Milestone 5); copy them to `.env` /
-`.env.local` and fill in real values as each variable's owning milestone lands. Only `ENVIRONMENT`
-is actually read by code today (`Settings` in `backend/app/core/config.py`) — the rest are
-reserved. Per `docs/02-system-architecture.md` §25, the full eventual set is:
+`.env.local` and fill in real values as each variable's owning milestone lands. `backend/.env`
+now exists and is filled in for `ENVIRONMENT`, `DATABASE_URL` (Session pooler connection string),
+`SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` (Milestone 6) — only `ENVIRONMENT` and
+`DATABASE_URL` are actually read by `Settings` today; the Supabase URL/key are filled in for
+later use but not consumed by any code yet. The rest remain reserved. Per
+`docs/02-system-architecture.md` §25, the full eventual set is:
 
 Backend (`backend/.env`):
 
@@ -403,8 +546,7 @@ EXPO_PUBLIC_API_BASE_URL
 
 ## Next Steps
 
-1. Begin Milestone 6 — Supabase Setup: create the Supabase project, configure the connection,
-   create a migration system, and create the initial tables (`briefings`, `economic_events`,
-   `enriched_events`, `fred_series`, `news_articles`, `device_tokens`, `job_runs`).
-2. Begin Milestone 7 — Configuration System.
-3. Begin Milestone 8 — Continuous Integration.
+1. Begin Milestone 7 — Configuration System: check scope carefully first (see Current Milestone
+   note above — much of this may already be satisfied by Milestones 3 and 6).
+2. Begin Milestone 8 — Continuous Integration.
+3. Begin Milestone 9 — API Foundation.
