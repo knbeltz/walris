@@ -5,6 +5,9 @@ requires-python = ">=3.14"
 
 [tool.ruff]
 line-length = 100
+# Alembic-generated migrations are historical, generated artifacts, not
+# hand-maintained code — don't hold them to our style rules.
+extend-exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
 select = [
@@ -17,6 +20,12 @@ select = [
     "C4",  # flake8-comprehensions
     "SIM", # flake8-simplify
 ]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection pattern (`param: X = Depends(...)`) requires
+# calling Depends()/Query()/etc. in argument defaults — that's the API, not
+# the mutable-default-argument footgun B008 normally guards against.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
 
 [tool.mypy]
 python_version = "3.14"
