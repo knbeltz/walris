@@ -65,7 +65,30 @@ export function HealthProfile() {
   )
 }
 ```
-
-
-
 */
+
+import { useQuery } from '@tanstack/react-query';
+
+export interface HealthResponse {
+  status: string;
+}
+
+async function getHealth(): Promise<HealthResponse> {
+  const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
+  const response = await fetch(`${BASE_URL}/health`);
+
+  if (!response.ok) {
+    throw new Error(`Health check failed: ${response.status}`);
+  }
+
+  const data: HealthResponse = await response.json();
+
+  return data;
+}
+
+export function useHealth() {
+  return useQuery({
+    queryKey: ['health'],
+    queryFn: getHealth,
+  });
+}
