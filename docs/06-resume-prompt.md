@@ -443,6 +443,12 @@ Full mentor workflow (Phases 1–7) was followed end to end. Summary for future 
   in identifying them, not just receive a pre-made list to confirm. If it's ambiguous whether
   something is "logic" or "config" (e.g., is a SQLAlchemy model class logic or schema config?),
   ask rather than assume.
+- **Explain-in-detail trigger:** whenever a concept referenced in
+  `docs/08-code-reference-milestones-3-6-9.md` comes up again during later work (SQLAlchemy
+  models/sessions, Alembic migrations, exception handlers, middleware, response models, UUIDs,
+  JSONB, cascade deletes, connection pooling, etc.), explain it in enough detail that the user has
+  what they need to actually write the next step themselves — don't assume it's already
+  internalized just because it was explained once when it was originally built.
 
 ## Current Architecture
 
