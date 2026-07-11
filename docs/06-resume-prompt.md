@@ -1,7 +1,7 @@
 # Walris Resume Prompt
 
 **Document:** docs/06-resume-prompt.md
-**Last Updated:** 2026-07-10 (Milestone 9 complete)
+**Last Updated:** 2026-07-11 (Milestone 10 complete)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -20,8 +20,14 @@ a physical iPhone). Both apps now have linting/formatting/type-checking tooling 
 required configuration. The backend now has a real Supabase Postgres database behind it — all
 seven core tables exist, migrations run through Alembic, and `GET /health` proves connectivity
 with a real query. GitHub Actions CI now runs all of the above (lint/format/type-check, both
-apps) on every push to `main` and every pull request, verified passing on a real run. No real
-screens/data fetching exist yet — that's later milestones.
+apps) on every push to `main` and every pull request, verified passing on a real run. The mobile
+app now makes its first real network call: a TanStack Query hook (`useHealthCheck.ts`) calls the
+backend's `GET /health` over the LAN and the home screen renders loading/error/success states,
+verified end-to-end on a physical iPhone against a real running backend (including deliberately
+triggering the error state by stopping the backend). This was also the first milestone where the
+project's author wrote the actual pseudocode and implementation themselves, per the working
+agreement change described below — Claude's role narrowed to configuration/tooling and review.
+No real screens/data fetching beyond this health check exist yet — that's later milestones.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -37,30 +43,95 @@ screens/data fetching exist yet — that's later milestones.
 - [x] **Milestone 7 — Configuration System**
 - [x] **Milestone 8 — Continuous Integration**
 - [x] **Milestone 9 — API Foundation**
-- [ ] Milestone 10 — First End-to-End Connection
+- [x] **Milestone 10 — First End-to-End Connection**
 - [ ] Milestones 11–26 — Core Backend (Part 2)
 - [ ] Milestones 27–40 — Mobile App (Part 3)
 - [ ] Milestones 41–56 — Notifications, QA, Deployment & Launch (Part 4)
 
 ## Current Milestone
 
-**Milestone 10 — First End-to-End Connection** (not started)
+**Milestone 11** (not started) — first milestone of Core Backend (Part 2), where real
+Walris-specific business logic begins (per the roadmap: database model touch-ups and integrating
+Finnhub to fetch today's economic events). Not yet scoped in detail — start with Phase 1
+(Understand the Milestone) following the same mentor workflow used since Milestone 3, under the
+working agreement established at Milestone 10 (user writes pseudocode/implementation, Claude
+handles configuration/tooling and reviews, with the edge-case split described in Important
+Decisions).
 
-- Goal per the roadmap: verify the mobile app talks to the backend for the first time. Backend:
-  `GET /health` (already exists). Frontend: call it via TanStack Query, display "Backend
-  Connected / Status: Healthy," handle loading/error/success states.
-- **Working agreement change starting this milestone:** the user writes pseudocode and the actual
-  implementation (the TanStack Query hook, the screen's loading/error/success UI); Claude handles
-  configuration/tooling and reviews. See Important Decisions below for the full agreement,
-  including the split on edge cases (Claude surfaces technical/infra ones; logical/behavioral
-  ones are worked out together). This is a deliberate, good first milestone to start on — small,
-  contained, no architectural decisions riding on it.
-- **Resume here:** Phase 1 (Understand the Milestone) for Milestone 10, following the same
-  mentor workflow used for Milestones 3–9 (understand → edge cases → pseudocode → implementation →
-  review → refactor → sign off), under the new working agreement.
-- Reference: `docs/08-code-reference-milestones-3-6-9.md` has a full snapshot of the Milestone
-  3/6/9 code (the milestones with real logic, as opposed to pure config) for study — not a
-  template to copy forward.
+### Milestone 10 — First End-to-End Connection (complete)
+
+First milestone under the new working agreement (see Important Decisions): the user wrote the
+pseudocode and implementation; Claude handled configuration/tooling and reviewed. Full mentor
+workflow (Phases 1–7) was followed, with Phase 3 (pseudocode) and Phase 4 (implementation) now
+done by the user instead of Claude.
+
+- **Decisions made (with reasoning):**
+  - **Fetch/API logic stays inline in the hook** (`useHealthCheck.ts`), not split into a separate
+    `lib/api.ts` — for exactly one endpoint, a shared API wrapper would be solving a duplication
+    problem that doesn't exist yet. Revisit once Milestone 11+ adds more hooks and the
+    duplication becomes real.
+  - **The home screen's placeholder content was replaced outright**, not kept alongside the
+    health check — the "Walris" heading/"Get started" button was itself throwaway Milestone-4
+    scaffolding, and since the health check display was explicitly framed as temporary
+    proof-of-connection (not a permanent fixture), showing only that gives the cleanest signal
+    the milestone is done. It'll get replaced again once real screens land.
+  - **No CORS middleware added — a correction, not a decision.** Claude initially told the user
+    CORS would be needed on the backend for the mobile app's requests to succeed, which was
+    wrong: CORS is a browser-enforced restriction, and React Native's `fetch` (backed by native
+    networking, not a browser engine) isn't subject to it. This only becomes relevant if
+    `expo start --web` is ever tested in an actual browser. Worth remembering so this doesn't get
+    re-litigated incorrectly in a future milestone.
+- **What got built:**
+  - `mobile/hooks/useHealthCheck.ts` — `HealthResponse` interface, `getHealth()` (fetches
+    `${EXPO_PUBLIC_API_BASE_URL}/health` via `process.env`, throws on `!response.ok`), and
+    `useHealth()` (a TanStack Query hook: `queryKey: ["health"]`, `queryFn: getHealth`, no
+    `enabled` guard needed since there's no conditional input to wait on).
+  - `mobile/app/index.tsx` — `HealthProfile` component branching on `isPending`/`isError`/success,
+    using `Text`/`View` (React Native's real primitives); `Home` now renders `HealthProfile`
+    directly in place of the old placeholder.
+  - `mobile/.env.local` (gitignored, not committed) — `EXPO_PUBLIC_API_BASE_URL` pointing at the
+    dev machine's LAN IP, required because the phone is a separate device from the Mac running
+    the backend.
+  - `mobile/package.json` — `@types/node` added as an explicit devDependency (previously only
+    present transitively).
+  - `.vscode/settings.json` (gitignored, local-only, not committed) — `typescript.tsdk` pointing
+    at the workspace's TypeScript install, fixing VS Code's language server defaulting to its own
+    bundled TypeScript version instead of the project's.
+  - Documented run command: `uvicorn app.main:app --reload --host 0.0.0.0` — the default bind
+    (`127.0.0.1`) only accepts same-machine connections, which would never let the phone reach it.
+- **Real bugs found during review** (all caught before ever running the app, across several
+  passes of the user's pseudocode and then real implementation):
+  - A self-recursive hook (`useHealth` calling itself instead of `useQuery`).
+  - `queryKey` referencing an undefined `status` variable — leftover copy-paste from a reference
+    example whose dynamic `userId` parameter doesn't apply to a parameterless health check.
+  - `enabled: Boolean()` called with zero arguments always evaluates `false`, which would have
+    meant the query never ran — a subtle miss of the reference example's actual intent
+    (`enabled: Boolean(userId)` guards a real condition; there's no equivalent condition here).
+  - A destructuring rename (`data: status`) that would have rendered the entire response object
+    instead of just the status string.
+  - A typo (`fron` instead of `from`) and an import path pointing at a nonexistent relative file,
+    later corrected to the project's `@/*` alias once the destination file was clarified.
+  - **The most significant one:** JSX (`HealthProfile`) was written inside a `.ts` file, which
+    doesn't compile — TypeScript requires `.tsx` for JSX. Underneath that, a second, subtler bug:
+    the component used raw HTML tags (`<p>`, `<section>`, `<h2>`), which don't exist in React
+    Native (no browser, no DOM) and would have crashed at runtime with an "Invariant Violation"
+    even after fixing the file extension — TypeScript's JSX types didn't catch this because
+    `@types/react`'s default HTML intrinsic elements silently type-check in this setup, so it's
+    invisible to `tsc`/ESLint and only shows up by actually running the app. Fixed by moving the
+    component into `app/index.tsx` (already a `.tsx` file) and swapping the HTML tags for
+    `Text`/`View`.
+- **A real editor-only issue, not a project bug:** VS Code's TypeScript language server was
+  running its own bundled version (`6.0.3`) instead of the project's actual installed version
+  (`5.9.3`), so it couldn't see `@types/node` and falsely flagged `process.env.EXPO_PUBLIC_API_
+  BASE_URL` as an error — while the real project compiler (the one CI runs) stayed clean the
+  entire time. This is a useful pattern to remember: when an error only shows up in the editor
+  but never in `tsc`/CI output, suspect an editor-vs-project TypeScript version mismatch before
+  assuming the code is actually broken.
+- **Verified working:** the full loading/error/success cycle was tested end-to-end on a physical
+  iPhone via Expo Go against the real running backend — success confirmed ("Backend Connected"
+  rendered after a real network round-trip over the LAN), error state confirmed by deliberately
+  stopping the backend and observing the error branch render `"Network request failed"` instead
+  of crashing or hanging, then the backend was restarted and reconfirmed healthy.
 
 ### Milestone 9 — API Foundation (complete)
 
@@ -443,6 +514,18 @@ Full mentor workflow (Phases 1–7) was followed end to end. Summary for future 
   in identifying them, not just receive a pre-made list to confirm. If it's ambiguous whether
   something is "logic" or "config" (e.g., is a SQLAlchemy model class logic or schema config?),
   ask rather than assume.
+- **Working agreement, confirmed working in practice (Milestone 10, 2026-07-11):** the split held
+  up well for its first real test. The user wrote pseudocode through several review passes, then
+  real implementation, catching and fixing issues themselves each round; Claude's review caught
+  real bugs before they were ever run (see Milestone 10 notes) rather than writing the fixes
+  directly. Worth continuing as-is into Milestone 11.
+- **CORS is not needed for native mobile requests** (established Milestone 10) — it's a
+  browser-enforced restriction; React Native's `fetch` (native networking, not a browser engine)
+  isn't subject to it. Only relevant if `expo start --web` is tested in an actual browser.
+- **When an error shows up only in the editor but never in `tsc`/CI output** (established
+  Milestone 10), suspect an editor-vs-project TypeScript version mismatch before assuming the
+  code is broken — check the TypeScript version VS Code's status bar reports against the
+  project's actual installed version.
 - **Explain-in-detail trigger:** whenever a concept referenced in
   `docs/08-code-reference-milestones-3-6-9.md` comes up again during later work (SQLAlchemy
   models/sessions, Alembic migrations, exception handlers, middleware, response models, UUIDs,
@@ -454,14 +537,21 @@ Full mentor workflow (Phases 1–7) was followed end to end. Summary for future 
 
 **Frontend** — Expo SDK 54 + TypeScript scaffold complete. `app/_layout.tsx` wires
 `SafeAreaProvider` → `QueryClientProvider` → React Navigation `ThemeProvider` → `Stack` →
-`PortalHost`. `app/index.tsx` is a placeholder home screen. `components/ui/` holds React Native
-Reusables primitives (`button`, `card`, `badge`, `separator`, `text`). `lib/` holds `utils.ts`
-(cn helper), `theme.ts` (Walris colors as React Navigation theme), `queryClient.ts`. Styling is
-NativeWind (Tailwind-style `className`) with Walris's actual design-system colors wired through
-`global.css` → `tailwind.config.js`. No custom fonts loaded yet (deferred), no real screens/data
-fetching yet (later milestones) — `hooks/` and `theme/typography.ts` from
-`docs/02-system-architecture.md` §13 don't exist yet. ESLint (flat config + `eslint-config-expo`)
-and Prettier (+ `prettier-plugin-tailwindcss`) are configured and passing clean.
+`PortalHost`. `app/index.tsx` no longer holds a static placeholder — `Home` renders
+`HealthProfile`, a component that calls `useHealth()` and branches on loading/error/success,
+using `Text`/`View`. `hooks/useHealthCheck.ts` (new as of Milestone 10, first entry in
+`hooks/`, matching `docs/02-system-architecture.md` §13's suggested structure) holds
+`HealthResponse`, `getHealth()` (fetches `GET /health` via `EXPO_PUBLIC_API_BASE_URL`), and
+`useHealth()` (the TanStack Query hook). `components/ui/` holds React Native Reusables
+primitives (`button`, `card`, `badge`, `separator`, `text`) — `button` is currently unused since
+the placeholder was replaced. `lib/` holds `utils.ts` (cn helper), `theme.ts` (Walris colors as
+React Navigation theme), `queryClient.ts`. Styling is NativeWind (Tailwind-style `className`)
+with Walris's actual design-system colors wired through `global.css` → `tailwind.config.js`. No
+custom fonts loaded yet (deferred), no real screens/data fetching beyond the health check yet
+(later milestones) — `theme/typography.ts` from `docs/02-system-architecture.md` §13 doesn't
+exist yet. ESLint (flat config + `eslint-config-expo`) and Prettier (+
+`prettier-plugin-tailwindcss`) are configured and passing clean. `mobile/.env.local` (gitignored)
+now exists with a real `EXPO_PUBLIC_API_BASE_URL` value.
 
 **Backend** — FastAPI scaffold complete. `app/main.py` wires settings → logging → middleware →
 exception handlers → routers. `core/` holds `config.py` (Pydantic Settings, fail-fast, reads
@@ -494,6 +584,8 @@ walris/
   .github/
     workflows/
       ci.yml                   (backend + mobile jobs; push to main + pull_request)
+  .vscode/
+    settings.json              (gitignored, local-only; typescript.tsdk override — Milestone 10)
   .gitignore
   README.md
   mobile/
@@ -511,9 +603,12 @@ walris/
     .prettierrc                (+ prettier-plugin-tailwindcss)
     .prettierignore
     .env.local.example
+    .env.local                 (gitignored; EXPO_PUBLIC_API_BASE_URL filled in with LAN IP)
     app/
       _layout.tsx              (SafeAreaProvider > QueryClientProvider > ThemeProvider > Stack > PortalHost)
-      index.tsx                 (placeholder home screen)
+      index.tsx                 (Home renders HealthProfile: loading/error/success from useHealth())
+    hooks/
+      useHealthCheck.ts         (HealthResponse, getHealth(), useHealth() — Milestone 10)
     components/
       ui/
         button.tsx
@@ -628,6 +723,14 @@ walris/
 - `docs/08-code-reference-milestones-3-6-9.md` — snapshot of the actual code from the three
   milestones that involved real logic (not just config), for study — not a template to copy
   forward now that the user writes implementation starting Milestone 10
+- `mobile/hooks/useHealthCheck.ts` — first user-written implementation on the project:
+  `HealthResponse`, `getHealth()`, `useHealth()` (TanStack Query hook wrapping `GET /health`)
+- `mobile/app/index.tsx` — `Home` now renders `HealthProfile`, which calls `useHealth()` and
+  branches on loading/error/success, replacing the Milestone 4 placeholder content
+- `mobile/.env.local` — gitignored, holds the real `EXPO_PUBLIC_API_BASE_URL` (dev machine's LAN
+  IP) needed for the phone to reach the backend over the network
+- `.vscode/settings.json` — gitignored, local-only; `typescript.tsdk` pointing at the workspace's
+  TypeScript install, fixing a VS Code editor-only false error (see Milestone 10 notes)
 
 ## Known Issues
 
@@ -664,8 +767,11 @@ Backend (working now):
 
 ```bash
 source backend/.venv/bin/activate
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --host 0.0.0.0
 ```
+
+`--host 0.0.0.0` is required (not just `--reload` alone) for the mobile app on a physical phone
+to reach it — the default bind (`127.0.0.1`) only accepts connections from this same machine.
 
 Health check: `curl http://127.0.0.1:8000/health` → `{"status":"ok"}`
 
@@ -677,7 +783,10 @@ npx expo start
 ```
 
 Scan the QR code with the Expo Go app (verified on a physical iPhone; no Xcode/Android Studio on
-this machine, so no simulator available — see Known Issues).
+this machine, so no simulator available — see Known Issues). Requires `mobile/.env.local` to
+exist with `EXPO_PUBLIC_API_BASE_URL` set to this Mac's current LAN IP, matching whatever the
+backend is bound to — if the Mac's IP changes (different network, router reassigns it), update
+`.env.local` and restart Metro (env vars are inlined at bundle time, not read at runtime).
 
 Database (working now, from `backend/` with the venv active):
 
@@ -696,8 +805,10 @@ the first one on a new table.
 now exists and is filled in for `ENVIRONMENT`, `DATABASE_URL` (Session pooler connection string),
 `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` (Milestone 6) — only `ENVIRONMENT` and
 `DATABASE_URL` are actually read by `Settings` today; the Supabase URL/key are filled in for
-later use but not consumed by any code yet. The rest remain reserved. Per
-`docs/02-system-architecture.md` §25, the full eventual set is:
+later use but not consumed by any code yet. The rest remain reserved. `mobile/.env.local` now
+exists too (Milestone 10), with `EXPO_PUBLIC_API_BASE_URL` set to the dev machine's LAN IP —
+read by `useHealthCheck.ts` via `process.env`. Per `docs/02-system-architecture.md` §25, the full
+eventual set is:
 
 Backend (`backend/.env`):
 
@@ -722,9 +833,8 @@ EXPO_PUBLIC_API_BASE_URL
 
 ## Next Steps
 
-1. Begin Milestone 10 — First End-to-End Connection: mobile calls `GET /health` via TanStack
-   Query, displays "Backend Connected / Status: Healthy," handles loading/error/success states.
-   **User writes the pseudocode and implementation this time** — see Important Decisions.
-2. Begin Milestones 11–26 — Core Backend (Part 2) — where real Walris-specific business logic
-   (briefing generation, external API integrations) actually begins.
+1. Begin Milestone 11 — the start of Core Backend (Part 2), where real Walris-specific business
+   logic (database model touch-ups, Finnhub integration for today's economic events) actually
+   begins. Not yet scoped — start with Phase 1 (Understand the Milestone).
+2. Continue Milestones 11–26 — Core Backend (Part 2).
 3. Begin Milestones 27–40 — Mobile App (Part 3).
