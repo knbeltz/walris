@@ -88,3 +88,43 @@ def test_create_and_query_economic_event(db_session):
     db_session.flush()
     db_session.delete(briefing)
     db_session.commit()
+
+
+def test_create_and_query_delete(db_session):
+    # Arrange
+    briefing = Briefing(
+        briefing_date=date(2026, 7, 12),
+        title="Daily Economic Briefing",
+        summary="A summary of today's major economic developments.",
+        status="draft",
+    )
+
+    db_session.add(briefing)
+    db_session.commit()
+
+    event = EconomicEvent(
+        briefing_id=briefing.id,
+        external_event_id="test-event-002",
+        event_name="1",
+        country="Germany",
+        release_time=datetime(2026, 7, 12, 13, 30, tzinfo=UTC),
+        actual_value=2.2,
+        forecast_value=2.3,
+        previous_value=2.1,
+        unit="2",
+        source="3",
+    )
+
+    db_session.add(event)
+    db_session.commit()
+
+    # Act
+    db_session.delete(briefing)
+    db_session.commit()
+
+    # Assert
+    queried_event = db_session.scalar(
+        select(EconomicEvent).where(EconomicEvent.external_event_id == "test-event-002")
+    )
+
+    assert queried_event is None
