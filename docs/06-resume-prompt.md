@@ -1,7 +1,7 @@
 # Walris Resume Prompt
 
 **Document:** docs/06-resume-prompt.md
-**Last Updated:** 2026-07-11 (Milestone 10 complete)
+**Last Updated:** 2026-07-12 (Milestone 11 complete)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -27,7 +27,11 @@ verified end-to-end on a physical iPhone against a real running backend (includi
 triggering the error state by stopping the backend). This was also the first milestone where the
 project's author wrote the actual pseudocode and implementation themselves, per the working
 agreement change described below — Claude's role narrowed to configuration/tooling and review.
-No real screens/data fetching beyond this health check exist yet — that's later milestones.
+The backend now has its first real automated tests: `pytest` is installed and configured, and
+three tests in `backend/tests/test_models.py` prove the SQLAlchemy model layer actually creates,
+queries, and cascade-deletes real rows against the live Supabase database — not just that a raw
+`SELECT 1` succeeds, which is all `GET /health` ever proved. No real screens/data fetching beyond
+the Milestone 10 health check exist yet — that's later milestones.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -44,19 +48,99 @@ No real screens/data fetching beyond this health check exist yet — that's late
 - [x] **Milestone 8 — Continuous Integration**
 - [x] **Milestone 9 — API Foundation**
 - [x] **Milestone 10 — First End-to-End Connection**
-- [ ] Milestones 11–26 — Core Backend (Part 2)
+- [x] **Milestone 11 — Database Models & Migrations**
+- [ ] Milestones 12–26 — Core Backend (Part 2)
 - [ ] Milestones 27–40 — Mobile App (Part 3)
 - [ ] Milestones 41–56 — Notifications, QA, Deployment & Launch (Part 4)
 
 ## Current Milestone
 
-**Milestone 11** (not started) — first milestone of Core Backend (Part 2), where real
-Walris-specific business logic begins (per the roadmap: database model touch-ups and integrating
-Finnhub to fetch today's economic events). Not yet scoped in detail — start with Phase 1
-(Understand the Milestone) following the same mentor workflow used since Milestone 3, under the
-working agreement established at Milestone 10 (user writes pseudocode/implementation, Claude
-handles configuration/tooling and reviews, with the edge-case split described in Important
-Decisions).
+**Milestone 12 — Finnhub Service** (not started) — the first milestone that touches a real
+external API: fetching today's economic calendar events from Finnhub. Not yet scoped in detail —
+start with Phase 1 (Understand the Milestone) following the same mentor workflow used since
+Milestone 3, under the working agreement established at Milestone 10 (user writes
+pseudocode/implementation, Claude handles configuration/tooling and reviews, with the edge-case
+split described in Important Decisions). Milestone 6's notes flagged that external-service
+milestones (an actual account/API key under the user's own credentials) are a real workflow
+shift worth remembering — this will be the second time that pattern comes up, after Supabase.
+
+### Milestone 11 — Database Models & Migrations (complete)
+
+Per the roadmap, this milestone is literally "create SQLAlchemy models and Alembic migrations for
+the 7 core tables" — but that work already happened in Milestone 6, out of necessity (Alembic's
+`--autogenerate` needed the models to exist to diff against). This overlap was flagged and
+predicted back in Milestone 6's own notes. Reading the actual acceptance criteria against what
+already existed: "tables exist in Supabase" and "migration runs from a clean database" were both
+already true. The one real gap was "backend can create and query records" — nothing had ever
+actually exercised the ORM layer; `GET /health` only ever ran a raw `SELECT 1`, which proves
+connectivity, not that the model classes correctly map to real rows. This milestone's real,
+non-overlapping work became: prove the ORM layer actually works, via real automated tests.
+
+- **Decisions made (with reasoning):**
+  - **A real `pytest` test suite, not a throwaway script.** "No automated tests exist yet" had
+    been sitting in Known Issues since Milestone 8. A script proves something worked once, on the
+    date it was run; a test is a permanent, machine-checked claim that gets re-run automatically
+    by the existing CI (Milestone 8) on every future push — catching regressions in code this
+    milestone touches, not just proving today's state.
+  - **Explicit `db_session.delete()` + `commit()` cleanup in each test, not a transaction-rollback
+    fixture.** A SQLAlchemy pattern exists where a fixture opens a savepoint-nested transaction
+    and rolls it back after every test, so nothing a test does is ever actually permanent,
+    regardless of cleanup code. That's the standard answer for larger, longer-lived test suites,
+    but it's meaningfully more machinery (a manually-managed transaction, an event listener
+    intercepting `commit()`) sitting invisibly in `conftest.py`, asking the user to trust it
+    without being able to read and understand it line by line. Given this project's own repeated
+    standing principle — don't build more infrastructure than what's needed right now — explicit,
+    visible cleanup in each test was judged the more consistent choice for where the project
+    actually is today. Worth revisiting toward the fixture pattern if the test suite grows enough
+    that this repeatedly bites.
+- **What got built:**
+  - `pytest` added to `requirements-dev.txt` and installed; `[tool.pytest.ini_options]` in
+    `pyproject.toml` (`testpaths = ["tests"]`, `pythonpath = ["."]` — the latter needed because,
+    unlike `uvicorn` run from `backend/`, pytest doesn't automatically know to look there for the
+    `app` package).
+  - `backend/tests/conftest.py` — a `db_session` fixture: the test-context equivalent of
+    `get_db()`, opening a `SessionLocal()` and closing it in `finally`, since tests run outside a
+    FastAPI request and can't use the real dependency directly.
+  - `backend/tests/test_models.py` — three tests, all passing and verified re-runnable:
+    - `test_create_and_query_briefing` — creates, queries, and cleans up a `Briefing`; asserts the
+      `id` UUID default and all field values round-trip correctly.
+    - `test_create_and_query_economic_event` — creates a `Briefing` then a linked `EconomicEvent`
+      (proving the foreign key relationship works), queries it back, cleans up both.
+    - `test_create_and_query_delete` — proves the `ondelete="CASCADE"` constraint from Milestone 6
+      actually fires: deletes only the parent `Briefing`, then confirms the linked `EconomicEvent`
+      is gone too, with no separate cleanup needed since cascade handled it.
+- **Real bugs found and fixed, several through the mentor review cycle rather than being caught
+  by tooling:**
+  - A missing required `source` field on `EconomicEvent` caused a real `NotNullViolation` the
+    first two times it was attempted — confirmed by actually running the test, not just reading
+    the code.
+  - Two separate leftover-row incidents: because cleanup code sits at the end of a test, a test
+    that fails partway through (on an assertion or a missing-field error) never reaches its own
+    cleanup, leaving a real permanent row in the live Supabase database that then collided with a
+    later run's insert on the same `briefing_date` (a unique column). Manually cleaned up outside
+    the test both times this happened during development.
+  - **A genuinely subtle, non-obvious bug**, caught by actually running the test rather than
+    reading the code: cleanup explicitly called `db_session.delete(queried_event)` before
+    `db_session.delete(briefing)`, intending to control deletion order and avoid relying on
+    cascade — but SQLAlchemy's flush ordering isn't guaranteed by the order `.delete()` is called
+    in Python; it's driven by ORM-level `relationship()` configuration, which none of the 7
+    models use (they only have raw `ForeignKey` columns). The actual SQL ended up deleting the
+    `Briefing` first, and Postgres's own cascade constraint silently removed the `EconomicEvent`
+    as a side effect — surfaced only as a `SAWarning` ("expected to delete 1 row(s); 0 were
+    matched"), not a failure. Fixed by adding `db_session.flush()` between the two deletes, which
+    forces the child's DELETE to actually execute before the parent delete is even staged.
+  - **A conceptual bug in the cascade test itself**, caught in review before it was ever run: the
+    first version of `test_create_and_query_delete` deleted the `EconomicEvent` directly in the
+    `Act` step instead of the `Briefing`. It would have passed — trivially, and for the wrong
+    reason — proving nothing about whether cascade delete actually works, since directly deleting
+    a row obviously removes it regardless of any FK constraint. A test that passes without
+    exercising the behavior it claims to verify is worse than not having the test at all, since it
+    creates false confidence.
+- **Verified working:** `ruff check`, `ruff format --check`, and `mypy --strict` all pass clean;
+  all three tests pass individually and as a suite, confirmed re-runnable by running the full
+  suite twice in direct succession with no leftover-data collisions; manually queried Supabase
+  directly after the cascade test to confirm both rows were actually gone, not just that the
+  test's own assertion (which queries the same database) reported so.
 
 ### Milestone 10 — First End-to-End Connection (complete)
 
@@ -486,7 +570,18 @@ Full mentor workflow (Phases 1–7) was followed end to end. Summary for future 
 - SQLAlchemy model classes for all 7 core tables were built in **Milestone 6**, not deferred to
   Milestone 11 as the roadmap's wording might suggest — Alembic's autogenerate needs the models to
   exist to diff against, so there was no way to do Milestone 6's migration-system deliverable
-  without them. Milestone 11 will likely be a light touch-up, not new model design.
+  without them. Milestone 11 confirmed this prediction: it was a light touch-up (adding the first
+  real tests), not new model design.
+- **Automated testing uses `pytest`, with explicit per-test cleanup, not a transaction-rollback
+  fixture** (Milestone 11) — see Milestone 11 notes for the full reasoning. Revisit toward the
+  fixture pattern if the test suite grows large enough that leftover-data-on-failure repeatedly
+  becomes a real problem.
+- **SQLAlchemy flush ordering across different mapped classes is not guaranteed by the order
+  `.delete()`/`.add()` is called in Python** unless an ORM-level `relationship()` connects them
+  (established Milestone 11) — none of the 7 models currently use `relationship()`, only raw
+  `ForeignKey` columns. When a single `commit()` needs to affect rows in a specific cross-table
+  order (e.g. deleting a child before its parent), call `db_session.flush()` between the
+  operations to force the order explicitly, rather than assuming Python call order controls it.
 - **Standing principle (confirmed again in Milestone 7):** don't pre-declare config fields, model
   fields, or scaffolding before the code that actually needs them exists — even when a roadmap
   milestone's wording suggests doing so now. Every time this has come up (font loading and dark
@@ -514,11 +609,12 @@ Full mentor workflow (Phases 1–7) was followed end to end. Summary for future 
   in identifying them, not just receive a pre-made list to confirm. If it's ambiguous whether
   something is "logic" or "config" (e.g., is a SQLAlchemy model class logic or schema config?),
   ask rather than assume.
-- **Working agreement, confirmed working in practice (Milestone 10, 2026-07-11):** the split held
-  up well for its first real test. The user wrote pseudocode through several review passes, then
-  real implementation, catching and fixing issues themselves each round; Claude's review caught
-  real bugs before they were ever run (see Milestone 10 notes) rather than writing the fixes
-  directly. Worth continuing as-is into Milestone 11.
+- **Working agreement, confirmed working in practice (Milestone 10, 2026-07-11; again in
+  Milestone 11, 2026-07-12):** the split held up well across both milestones. The user wrote
+  pseudocode/implementation through several review passes each time, catching and fixing issues
+  themselves each round; Claude's review caught real bugs — including a test that would have
+  passed while proving nothing (Milestone 11's cascade test deleting the wrong object) — rather
+  than writing the fixes directly. Worth continuing as-is into Milestone 12.
 - **CORS is not needed for native mobile requests** (established Milestone 10) — it's a
   browser-enforced restriction; React Native's `fetch` (native networking, not a browser engine)
   isn't subject to it. Only relevant if `expo start --web` is tested in an actual browser.
@@ -565,7 +661,10 @@ SQLAlchemy model classes. `schemas/` holds `errors.py` (`ErrorDetail`/`ErrorResp
 placeholder comment, same pattern as the Milestone 6/7 overlaps. `services/`, `utils/` still
 empty, awaiting later milestones. Ruff (lint + format) and mypy `--strict` are configured via
 `pyproject.toml` and passing clean; `alembic/versions/` excluded from linting (generated,
-historical files).
+historical files). `tests/` (new as of Milestone 11) holds `conftest.py` (`db_session` fixture)
+and `test_models.py` (three tests proving the ORM layer creates/queries/cascade-deletes real
+rows) — the project's first automated test suite, run via `pytest` and configured in
+`pyproject.toml` (`testpaths`, `pythonpath`).
 
 **Database** — Supabase PostgreSQL, project created and live (Milestone 6). All 7 core tables
 exist: `briefings`, `economic_events`, `enriched_events`, `fred_series`, `news_articles`,
@@ -623,9 +722,10 @@ walris/
   backend/
     README.md
     requirements.txt           (+ sqlalchemy, alembic, psycopg[binary])
-    requirements-dev.txt       (-r requirements.txt, ruff, mypy)
+    requirements-dev.txt       (-r requirements.txt, ruff, mypy, pytest)
     pyproject.toml             (Ruff lint+format config incl. alembic/versions exclude
-                                 and Depends()/Query() bugbear allowlist; mypy strict config)
+                                 and Depends()/Query() bugbear allowlist; mypy strict config;
+                                 [tool.pytest.ini_options]: testpaths, pythonpath)
     .env                       (gitignored; DATABASE_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY filled in)
     .env.example
     .venv/                     (gitignored; fastapi, uvicorn, pydantic-settings, ruff, mypy,
@@ -664,6 +764,9 @@ walris/
         health.py                (HealthResponse)
       services/__init__.py     (empty — Milestone 12+)
       utils/__init__.py        (empty — nothing needed yet)
+    tests/
+      conftest.py               (db_session fixture — Milestone 11)
+      test_models.py             (create/query/cascade-delete tests for Briefing, EconomicEvent)
   docs/
     01-product-requirements.md
     02-system-architecture.md
@@ -731,6 +834,10 @@ walris/
   IP) needed for the phone to reach the backend over the network
 - `.vscode/settings.json` — gitignored, local-only; `typescript.tsdk` pointing at the workspace's
   TypeScript install, fixing a VS Code editor-only false error (see Milestone 10 notes)
+- `backend/tests/conftest.py` — the project's first test fixture (`db_session`)
+- `backend/tests/test_models.py` — the project's first automated tests: create/query for
+  `Briefing` and `EconomicEvent`, plus a cascade-delete test proving the Milestone 6
+  `ondelete="CASCADE"` constraint actually works, not just that the migration declares it
 
 ## Known Issues
 
@@ -742,14 +849,20 @@ walris/
   emails for the same person. Worth running
   `git config --global user.name "..."` and `git config --global user.email "..."` yourself soon
   (not done automatically — see git safety rules).
-- System Python is 3.14.6. **Resolved as a non-issue**: Milestone 3's dependencies (fastapi,
-  uvicorn, pydantic-settings, and compiled sub-deps like pydantic-core, httptools, uvloop,
-  watchfiles) all installed cleanly with prebuilt 3.14 wheels. Worth re-checking if a future
-  milestone (e.g. SQLAlchemy/Alembic in Milestone 11, or a DB driver) hits a wheel gap, but no
-  action needed for now.
-- No automated tests exist yet (no pytest/jest suite) — CI (Milestone 8) runs linting/type
-  checking/formatting on every push/PR, but there's nothing to actually test yet since there's no
-  business logic beyond config/models/health checks. Add real tests as they become meaningful.
+- System Python is 3.14.6. **Resolved as a non-issue**: every dependency added so far, including
+  `pytest` in Milestone 11, has installed cleanly with prebuilt 3.14 wheels. No action needed.
+- **CI does not run `pytest` yet, despite the backend now having a real test suite (Milestone
+  11).** `.github/workflows/ci.yml`'s backend job still only runs Ruff/mypy. This isn't a simple
+  oversight to fix by adding one line: the tests in `backend/tests/test_models.py` hit the real,
+  live Supabase database directly, and CI currently has no `DATABASE_URL` (or any backend secret)
+  configured at all — `Settings`' fail-fast validation would immediately reject a bare `pytest`
+  step in CI with a missing-config error. Wiring this up for real requires a deliberate decision
+  first: whether CI should run tests against the actual dev Supabase database (meaning a GitHub
+  Actions secret holding real database credentials, and every push/PR inserting and deleting real
+  rows in it) or a separate dedicated test database. Worth resolving explicitly, not by default,
+  before adding the CI step — this is exactly the kind of gap that undercuts the reasoning used to
+  justify choosing `pytest` over a throwaway script in the first place (that CI would re-run it
+  automatically forever), since right now CI isn't actually doing that yet.
 - No Xcode or Android Studio installed on this machine (only Xcode Command Line Tools) — no iOS
   Simulator or Android emulator available. Mobile verification happens via Expo Go on a physical
   iPhone 17 Pro instead. Fine for now; would need addressing before any native-build-only feature
@@ -798,6 +911,16 @@ alembic revision --autogenerate -m "description"   # generate a new migration fr
 Always read an autogenerated migration before applying it — don't trust it blindly, especially
 the first one on a new table.
 
+Tests (working now, from `backend/` with the venv active):
+
+```bash
+pytest tests/ -v
+```
+
+Runs against the real, live Supabase database (no separate test database exists yet — see Known
+Issues) — each test in `test_models.py` creates and explicitly cleans up its own rows. Not yet
+wired into CI (see Known Issues).
+
 ## Environment Variables
 
 `backend/.env.example` and `mobile/.env.local.example` exist (Milestone 5); copy them to `.env` /
@@ -833,8 +956,10 @@ EXPO_PUBLIC_API_BASE_URL
 
 ## Next Steps
 
-1. Begin Milestone 11 — the start of Core Backend (Part 2), where real Walris-specific business
-   logic (database model touch-ups, Finnhub integration for today's economic events) actually
-   begins. Not yet scoped — start with Phase 1 (Understand the Milestone).
-2. Continue Milestones 11–26 — Core Backend (Part 2).
-3. Begin Milestones 27–40 — Mobile App (Part 3).
+1. Begin Milestone 12 — Finnhub Service, the first milestone integrating a real external API.
+   Not yet scoped — start with Phase 1 (Understand the Milestone). Expect the same kind of
+   account/API-key workflow shift Milestone 6 first introduced for Supabase.
+2. Decide whether/how to wire `pytest` into CI (see Known Issues) — needs a decision on test
+   database strategy before it's a simple config change.
+3. Continue Milestones 12–26 — Core Backend (Part 2).
+4. Begin Milestones 27–40 — Mobile App (Part 3).
