@@ -10,6 +10,7 @@ class Settings(BaseSettings):
 
     environment: Literal["development", "production"] = "development"
     database_url: str
+    finnhub_api_key: str
 
 
 settings = Settings()
