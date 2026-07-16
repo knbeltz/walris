@@ -578,47 +578,63 @@ Database schema is ready for the core briefing pipeline.
 
 ---
 
-## Milestone 12 — Finnhub Service
+## Milestone 12 — FMP Market Data Service
 
 ### Objective
 
-Create the service responsible for fetching economic calendar events.
+Create the service responsible for fetching daily market data: an index market snapshot, sector
+performance, and a market-cap-filtered "Company Spotlight" mover of the day.
+
+### Why
+
+Originally scoped around Finnhub's economic calendar. Finnhub's calendar endpoint turned out to
+require a paid plan ($50/month), and Financial Modeling Prep's (FMP) equivalent calendar
+endpoints are either paid or fully retired — no viable free calendar-style data source was found
+across either provider. Pivoted to FMP's free-tier market-data endpoints instead, reframing the
+daily briefing's data layer around market snapshot + sector performance + a notable large-cap
+mover, rather than a calendar of scheduled economic releases.
 
 ### Deliverables
 
 Create:
 
 ```text
-services/finnhub_service.py
-schemas/economic_event.py
+services/fmp_service.py
+schemas/market_data.py
 ```
 
 Service should:
 
-- Call Finnhub economic calendar API
-- Fetch today's events
-- Normalize event fields
-- Handle failed requests
-- Return typed event objects
+- Fetch an index market snapshot (e.g. S&P 500) via FMP's `/stable/quote`
+- Fetch sector performance via FMP's `/stable/sector-performance-snapshot`, identifying the
+  best- and worst-performing sector of the day
+- Fetch a Company Spotlight: pull FMP's `/stable/biggest-gainers` and `/stable/biggest-losers`,
+  filter by market cap (via `/stable/profile`, threshold $10B+) to exclude small/obscure
+  companies, and select the top qualifying gainer/loser
+- Normalize all raw FMP fields into typed schema objects (`IndexQuote`, `SectorPerformance`,
+  `CompanySpotlight`)
+- Handle failed requests: log clearly, let exceptions propagate (no silent fallback to an empty
+  result)
 
 ### Acceptance Criteria
 
-- Finnhub service returns normalized event data.
-- No raw Finnhub response leaks into the rest of the app.
+- Service returns normalized market snapshot, sector performance, and company spotlight data.
+- No raw FMP response leaks into the rest of the app.
 - Errors are logged clearly.
 
 ### Definition of Done
 
-Backend can retrieve today's economic events.
+Backend can retrieve today's market snapshot, sector movers, and a market-cap-filtered company
+spotlight.
 
 ### Suggested Commit
 
-`feat: integrate Finnhub economic calendar`
+`feat: integrate FMP market data (snapshot, sector movers, company spotlight)`
 
 ### Claude Code Tutor Prompt
 
-> Help me build the Finnhub service for Walris. I want to understand how to isolate external API
-> logic behind a clean service layer.
+> Help me build the FMP market data service for Walris. I want to understand how to isolate
+> external API logic behind a clean service layer.
 
 ---
 

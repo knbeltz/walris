@@ -29,7 +29,7 @@ External Data + AI APIs
 
 External APIs:
 
-- **Finnhub** — economic calendar events
+- **FMP (Financial Modeling Prep)** — market data (index quotes, sector performance, notable movers)
 - **FRED** — historical economic data
 - **Marketaux** — contextual financial news
 - **OpenAI** — event ranking, summaries, synthesis
@@ -45,10 +45,10 @@ Supabase PostgreSQL
   ↓
 Data Processing Services
   ↓
-Finnhub + FRED + Marketaux + OpenAI
+FMP + FRED + Marketaux + OpenAI
 ```
 
-The mobile app should never call Finnhub, FRED, Marketaux, or OpenAI directly.
+The mobile app should never call FMP, FRED, Marketaux, or OpenAI directly.
 
 All external API logic belongs in the backend.
 
@@ -187,7 +187,7 @@ The FastAPI backend should be organized around services.
 
 ```text
 services/
-  finnhub_service.py
+  fmp_service.py
   fred_service.py
   marketaux_service.py
   openai_service.py
@@ -195,14 +195,16 @@ services/
   notification_service.py
 ```
 
-### Finnhub Service
+### FMP Service
 
 Responsible for:
 
-- Fetching economic calendar events
-- Normalizing event fields
-- Handling Finnhub API errors
-- Returning clean event objects
+- Fetching a market snapshot (index quotes, e.g. S&P 500)
+- Fetching sector performance and identifying the best/worst performing sector
+- Fetching a Company Spotlight: pulling biggest gainers/losers, filtering by market cap, and
+  selecting the top qualifying mover
+- Normalizing raw FMP fields into typed objects
+- Handling FMP API errors
 
 ### FRED Service
 
@@ -608,11 +610,11 @@ The backend should isolate each external provider behind a service class or modu
 This prevents vendor-specific logic from spreading across the codebase.
 
 ```text
-Finnhub raw response
+FMP raw response
   ↓
-FinnhubService
+FMPService
   ↓
-NormalizedEconomicEvent
+Normalized market data (IndexQuote / SectorPerformance / CompanySpotlight)
 ```
 
 All external API responses should be normalized before being stored or sent to OpenAI.
@@ -635,7 +637,7 @@ Caching rules:
 
 The system should degrade gracefully.
 
-**Finnhub Failure** — Return previous available briefing or show no-briefing state.
+**FMP Failure** — Return previous available briefing or show no-briefing state.
 
 **FRED Failure** — Generate event without historical context.
 
@@ -675,7 +677,7 @@ Recommended V1 deployment:
 
 **Push Notifications:** Expo Notifications
 
-**External APIs:** Finnhub, FRED, Marketaux, OpenAI
+**External APIs:** FMP, FRED, Marketaux, OpenAI
 
 ## 25. Environment Variables
 
@@ -685,7 +687,7 @@ Backend environment variables:
 DATABASE_URL
 SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY
-FINNHUB_API_KEY
+FMP_API_KEY
 FRED_API_KEY
 MARKETAUX_API_KEY
 OPENAI_API_KEY
@@ -778,7 +780,7 @@ FastAPI backend
   ↓
 Supabase database/cache
   ↓
-Finnhub + FRED + Marketaux + OpenAI
+FMP + FRED + Marketaux + OpenAI
   ↓
 Expo push notifications
 ```

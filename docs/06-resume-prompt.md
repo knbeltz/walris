@@ -1,7 +1,7 @@
 # Walris Resume Prompt
 
 **Document:** docs/06-resume-prompt.md
-**Last Updated:** 2026-07-12 (Milestone 11 complete)
+**Last Updated:** 2026-07-16 (Milestone 12 in progress — updated mid-milestone, see below)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -31,7 +31,12 @@ The backend now has its first real automated tests: `pytest` is installed and co
 three tests in `backend/tests/test_models.py` prove the SQLAlchemy model layer actually creates,
 queries, and cascade-deletes real rows against the live Supabase database — not just that a raw
 `SELECT 1` succeeds, which is all `GET /health` ever proved. No real screens/data fetching beyond
-the Milestone 10 health check exist yet — that's later milestones.
+the Milestone 10 health check exist yet — that's later milestones. Milestone 12 is currently
+**in progress and mid-pivot**: the roadmap's original "Finnhub Service" scope turned out to be
+unbuildable on a free/personal-use basis (see the Milestone 12 section below for the full story),
+and has been redesigned around Financial Modeling Prep's (FMP) free-tier market-data endpoints
+instead. This document was updated now, mid-milestone rather than at completion, specifically so a
+new session has full context if this conversation gets cleared before the milestone is finished.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -55,14 +60,101 @@ the Milestone 10 health check exist yet — that's later milestones.
 
 ## Current Milestone
 
-**Milestone 12 — Finnhub Service** (not started) — the first milestone that touches a real
-external API: fetching today's economic calendar events from Finnhub. Not yet scoped in detail —
-start with Phase 1 (Understand the Milestone) following the same mentor workflow used since
-Milestone 3, under the working agreement established at Milestone 10 (user writes
-pseudocode/implementation, Claude handles configuration/tooling and reviews, with the edge-case
-split described in Important Decisions). Milestone 6's notes flagged that external-service
-milestones (an actual account/API key under the user's own credentials) are a real workflow
-shift worth remembering — this will be the second time that pattern comes up, after Supabase.
+**Milestone 12 — FMP Market Data Service** (in progress, mid-pivot, pseudocode not yet written)
+
+### The pivot story (read this first if resuming cold)
+
+Milestone 12 started, per the roadmap, as "Finnhub Service" — fetch today's economic calendar
+events from Finnhub. Config/tooling was wired up (`FINNHUB_API_KEY` in `Settings`, `httpx` added
+as the HTTP client), and a full `finnhub_service.py` + `schemas/economic_event.py` implementation
+was written, reviewed, and got to a clean state (`ruff check`/`ruff format --check`/`mypy --strict`
+all passing). But the actual end-to-end verification call against the real Finnhub API returned
+**`403: You don't have access to this resource`** — Finnhub's economic calendar endpoint turned out
+to require a paid plan (confirmed via the account's own pricing page: a dedicated
+"Economic Data" pricing table shows Economic Calendar gated behind a $50/month plan, not included
+in either the free or the general $3,500/month "All-In-One" tier).
+
+Pivoted to trying **Financial Modeling Prep (FMP)** instead, since it looked like a plausible free
+alternative with a similar `from`/`to` + API-key-as-query-param shape. Same result, twice over:
+FMP's newer `/stable/economic-calendar` endpoint returned `402 Payment Required`, and the older
+legacy `/api/v3/economic_calendar` endpoint (what most third-party blog posts/docs referenced)
+returned a `403` explaining it's a fully retired endpoint ("only available for legacy users who
+have valid subscriptions prior to August 31, 2025"). **Conclusion, confirmed empirically across
+two providers: there is no viable free/personal-use source for a scheduled economic-events
+calendar with actual-vs-forecast data.** Don't re-attempt this without a real budget decision —
+Finnhub's $50/month plan is the cheapest confirmed-working option found so far.
+
+**Scope was renegotiated as a result**, not just "swap the provider." Rather than a calendar of
+discrete scheduled events, the daily briefing's data layer is being rebuilt around FMP's free-tier
+market-data endpoints (all confirmed working empirically with a real key):
+
+- **Market Snapshot** — index quote(s) (e.g. S&P 500) via `/stable/quote`.
+- **Sector Movers** — best/worst performing sector via `/stable/sector-performance-snapshot`.
+- **Company Spotlight** — pull `/stable/biggest-gainers` and `/stable/biggest-losers` (50 each,
+  confirmed free), look up each symbol's `marketCap` via `/stable/profile` (also confirmed free —
+  and conveniently returns company name/sector/market-cap in one call), filter out anything under
+  **$10B** market cap (to avoid obscure micro-caps dominating the raw gainers/losers lists — the
+  unfiltered lists were dominated by penny stocks like "Twin Vee Powercats Co." +45%, not
+  meaningful to a general reader), and take the top qualifying gainer/loser.
+- Explicitly rejected: Yahoo Finance / `yfinance` — no official API exists (Yahoo shut it down in
+  2017); `yfinance`-style access reverse-engineers Yahoo's internal endpoints, which can break
+  without notice and isn't a stable foundation for a scheduled production job, even though it's
+  broader/free. Also technically "personal use only" per Yahoo's own terms.
+- FMP's own server-side "screener" filtering (e.g. `marketCapMoreThan` as a query param on
+  `biggest-gainers`) was tested and confirmed **not supported on the free tier** — the parameter
+  is silently ignored. Filtering has to happen client-side, after fetching.
+
+**This is a real, unresolved open question, not yet decided:** Milestones 13 (Store Finnhub
+Events), 16 (FRED Service), 18 (Marketaux), and 20 (OpenAI) — everything downstream of Milestone
+12 — were designed around **discrete "events"** flowing through the pipeline (fetch events → match
+each event to a FRED series → search news per event → rank events with OpenAI). That design
+assumption no longer holds now that Milestone 12's output is a market snapshot + sector movers +
+one spotlight company, not a list of events. **This needs a real design conversation before
+starting Milestone 13** — don't assume the old pipeline shape still applies. `docs/01-product-
+requirements.md` §10 (MVP Definition) also still describes the product around "five most important
+economic events" and needs a matching reframe — deliberately deferred as its own separate
+conversation, not done as part of this docs cleanup pass.
+
+### Current implementation state
+
+- `backend/app/services/fmp_service.py` exists but is **not in a working state** — it currently
+  contains the entire old Finnhub implementation sitting inertly inside a `'''...'''` triple-quoted
+  string (dead code, including a reference to `settings.finnhub_api_key`, which no longer exists
+  as a `Settings` field), followed by a rough diagnostic test snippet used to explore FMP's raw
+  response shape. **Needs a full rewrite**, not a patch — one function per data category (market
+  snapshot, sector movers, company spotlight) was the agreed direction, each returning its own
+  typed schema object.
+- `backend/app/schemas/economic_event.py` (the `EconomicEvent` Pydantic schema) is now **unused
+  dead weight** from the abandoned calendar scope — not yet deleted, decision deferred to whenever
+  the FMP rewrite actually happens.
+- New schemas agreed on but **not yet created**: `IndexQuote` (`symbol`, `name`, `price`, `change`,
+  `change_percentage`), `SectorPerformance` (`sector`, `average_change`, `date`), `CompanySpotlight`
+  (`symbol`, `name`, `price`, `change`, `change_percentage`, `market_cap`,
+  `direction: Literal["gainer", "loser"]`). Field-naming gotcha to remember while writing the
+  normalization logic: FMP's raw `quote` endpoint uses `changePercentage`, but
+  `biggest-gainers`/`biggest-losers` use `changesPercentage` (extra "s") — easy to typo.
+- `backend/app/core/config.py` / `backend/.env.example` — already updated: `finnhub_api_key` field
+  removed, `fmp_api_key` added and confirmed working (`Settings` loads it correctly). Real
+  `backend/.env` has a real, working `FMP_API_KEY` (gitignored, not committed).
+- **Known key exposure:** the FMP key was briefly printed into a terminal error message during
+  ad-hoc testing (an `httpx` exception's default string representation includes the full request
+  URL, which contains `apikey=...` as a query param) — same category of incident as the Milestone
+  6 Supabase key exposure. Worth rotating the FMP key from the dashboard as a precaution, same as
+  recommended (but not yet confirmed done) for Supabase back then.
+- `docs/02-system-architecture.md` and `docs/03-development-roadmap.md` (Milestone 12 section)
+  have been updated to reflect the FMP pivot as of this doc update. Two references were
+  **deliberately left unchanged** in `02-system-architecture.md`, tied to the unresolved downstream
+  pipeline question above: §5's data-flow diagram (still says "Fetch today's economic calendar
+  from Finnhub" and describes matching events to FRED/searching news per event) and the
+  `economic_events` table description under §12 (still says "Stores normalized economic event data
+  from Finnhub") — both need the real Milestone 13+ design conversation, not a mechanical
+  word-swap, since it's not yet decided whether an `economic_events`-shaped table is still the
+  right model at all.
+
+Working agreement from Milestone 10 (user writes pseudocode/implementation, Claude handles
+configuration/tooling + technical edge cases + Phases 1/5/6/7) held throughout this pivot — all of
+the FMP endpoint testing/verification above was done directly in a shared back-and-forth, not
+written as unreviewed code by either side alone.
 
 ### Milestone 11 — Database Models & Migrations (complete)
 
@@ -628,6 +720,35 @@ Full mentor workflow (Phases 1–7) was followed end to end. Summary for future 
   JSONB, cascade deletes, connection pooling, etc.), explain it in enough detail that the user has
   what they need to actually write the next step themselves — don't assume it's already
   internalized just because it was explained once when it was originally built.
+- **No free/personal-use economic calendar data source exists, confirmed empirically across two
+  providers (Milestone 12, 2026-07-16):** Finnhub's calendar requires a $50/month plan; FMP's
+  equivalent endpoints are either paid (`402`) or fully retired (`403`, legacy endpoint sunset
+  August 2025). Don't re-attempt building around a free scheduled-events calendar without a real
+  budget decision first — see the Milestone 12 section above for the full story.
+- **Company Spotlight uses a $10B market-cap floor, filtered client-side** (Milestone 12) — FMP's
+  free `biggest-gainers`/`biggest-losers` endpoints return real data but are dominated by obscure
+  micro-caps; a server-side `marketCapMoreThan` filter was tested and confirmed **not supported**
+  on the free tier (silently ignored). Client-side filtering via a `/stable/profile` lookup per
+  symbol is the only option, and is affordable (100 extra calls max, well under the 250/day free
+  limit for a once-a-day job).
+- **Yahoo Finance / `yfinance` rejected as a data source** (Milestone 12) — no official API has
+  existed since 2017; unofficial access reverse-engineers Yahoo's internal endpoints and can break
+  without notice, an unacceptable risk for a scheduled production job, despite offering broader
+  free data than FMP.
+- **The daily job's "today" should use this machine's/the target user's local timezone, not UTC**
+  (Milestone 12) — the product intent is the briefing arriving on the same local morning, which
+  breaks if a future deployment's server defaults to UTC. Not yet fixed in code (`fetch_todays_
+  economic_events`/whatever the FMP equivalent becomes still uses bare `date.today()`) — the
+  eventual fix is explicit `zoneinfo`-based timezone handling, not relying on server config,
+  deferred until the actual deployment milestone. Separately, `docs/02-system-architecture.md`
+  §23 already recommends "6:00 AM ET" as the V1 schedule, which is a useful existing hint toward
+  which timezone to hardcode when that milestone arrives.
+- **Downstream pipeline design (Milestones 13/16/18/20) is an open question, not yet decided**
+  (Milestone 12, 2026-07-16) — those milestones were designed around discrete "events" flowing
+  through FRED matching/news search/OpenAI ranking; that assumption breaks now that Milestone 12
+  produces a market snapshot + sector movers + one spotlight company instead. Needs a real design
+  conversation before Milestone 13 starts, not an assumption that the old pipeline shape still
+  applies.
 
 ## Current Architecture
 
@@ -762,7 +883,11 @@ walris/
         __init__.py              (exports ErrorDetail, ErrorResponse, HealthResponse)
         errors.py                (ErrorDetail, ErrorResponse — the standard error envelope)
         health.py                (HealthResponse)
-      services/__init__.py     (empty — Milestone 12+)
+        economic_event.py         (EconomicEvent — unused dead weight, abandoned Finnhub scope,
+                                    not yet deleted; see Milestone 12)
+      services/
+        __init__.py
+        fmp_service.py             (non-working/transitional — needs full rewrite; see Milestone 12)
       utils/__init__.py        (empty — nothing needed yet)
     tests/
       conftest.py               (db_session fixture — Milestone 11)
@@ -841,14 +966,12 @@ walris/
 
 ## Known Issues
 
-- Global git identity (`user.name`/`user.email`) is still not configured on this machine.
-  Confirmed this is now causing real inconsistency: early commits used
-  `Kai Beltz <kaibeltz@Kais-MacBook-Pro.local>`, but a later commit in this same session used
-  `Kai Beltz <kaibeltz@macbook-pro.mynetworksettings.com>` — git's auto-derived identity changed
-  based on network/hostname resolution. The repo's commit history now has inconsistent author
-  emails for the same person. Worth running
-  `git config --global user.name "..."` and `git config --global user.email "..."` yourself soon
-  (not done automatically — see git safety rules).
+- **Resolved (2026-07-16):** global git identity (`user.name`/`user.email`) is now configured
+  (`Kai Beltz` / `kainbeltz@gmail.com`), fixing the inconsistent auto-derived hostname-based
+  identity from earlier commits (`kaibeltz@Kais-MacBook-Pro.local`,
+  `kaibeltz@macbook-pro.mynetworksettings.com`, `kaibeltz@kais-mbp.mynetworksettings.com` — three
+  distinct values across earlier commits). Not retroactively rewritten on old commits (not worth
+  it for a cosmetic issue on a private repo) — only future commits are affected.
 - System Python is 3.14.6. **Resolved as a non-issue**: every dependency added so far, including
   `pytest` in Milestone 11, has installed cleanly with prebuilt 3.14 wheels. No action needed.
 - **CI does not run `pytest` yet, despite the backend now having a real test suite (Milestone
@@ -873,6 +996,25 @@ walris/
 - Mobile has no custom fonts loaded yet (Libre Caslon Text / Inter / JetBrains Mono per
   `docs/04-design-system.md` §5) — deliberately deferred until a milestone that builds a real
   screen needing them. Currently renders with the system default font.
+- **`backend/app/services/fmp_service.py` is in a non-working, transitional state** (Milestone
+  12) — contains the entire old Finnhub implementation dead inside a `'''...'''` string (including
+  a reference to the now-nonexistent `settings.finnhub_api_key`), followed by a rough diagnostic
+  test snippet. Needs a full rewrite around the new market-snapshot/sector-movers/company-spotlight
+  design — see the Milestone 12 section above.
+- **The FMP API key was briefly exposed in a terminal error message** during ad-hoc testing
+  (Milestone 12) — `httpx` exceptions include the full request URL, which contains `apikey=...` as
+  a query param. Worth rotating from the FMP dashboard; not yet confirmed done.
+- **Downstream pipeline design (Milestones 13/16/18/20) is unresolved** (Milestone 12) — those
+  milestones assumed discrete "events" flowing through FRED matching/news search/OpenAI ranking;
+  Milestone 12's new output (market snapshot + sector movers + one spotlight company) doesn't fit
+  that shape. Needs an explicit design conversation before Milestone 13 starts.
+- **`docs/01-product-requirements.md` §10 (MVP Definition) still describes the product around
+  "five most important economic events"** — needs reframing to match the market-data pivot,
+  deliberately deferred as its own separate conversation (not done as part of the Milestone 12
+  docs cleanup).
+- **`backend/app/schemas/economic_event.py` (`EconomicEvent`) is unused dead weight** from the
+  abandoned Finnhub/calendar scope — not yet deleted; decide when the `fmp_service.py` rewrite
+  happens.
 
 ## Commands
 
@@ -926,12 +1068,15 @@ wired into CI (see Known Issues).
 `backend/.env.example` and `mobile/.env.local.example` exist (Milestone 5); copy them to `.env` /
 `.env.local` and fill in real values as each variable's owning milestone lands. `backend/.env`
 now exists and is filled in for `ENVIRONMENT`, `DATABASE_URL` (Session pooler connection string),
-`SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` (Milestone 6) — only `ENVIRONMENT` and
-`DATABASE_URL` are actually read by `Settings` today; the Supabase URL/key are filled in for
-later use but not consumed by any code yet. The rest remain reserved. `mobile/.env.local` now
-exists too (Milestone 10), with `EXPO_PUBLIC_API_BASE_URL` set to the dev machine's LAN IP —
-read by `useHealthCheck.ts` via `process.env`. Per `docs/02-system-architecture.md` §25, the full
-eventual set is:
+`SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` (Milestone 6), and `FMP_API_KEY` (Milestone 12,
+replacing the short-lived `FINNHUB_API_KEY` — Finnhub's calendar access turned out to require a
+paid plan, see the Milestone 12 section above) — `ENVIRONMENT`, `DATABASE_URL`, and `FMP_API_KEY`
+are actually read by `Settings` today; the Supabase URL/key are filled in for later use but not
+consumed by any code yet. The rest remain reserved. The FMP key was briefly exposed in a terminal
+error message during testing — worth rotating from the FMP dashboard as a precaution (see
+Milestone 12 / Known Issues). `mobile/.env.local` now exists too (Milestone 10), with
+`EXPO_PUBLIC_API_BASE_URL` set to the dev machine's LAN IP — read by `useHealthCheck.ts` via
+`process.env`. Per `docs/02-system-architecture.md` §25, the full eventual set is:
 
 Backend (`backend/.env`):
 
@@ -939,7 +1084,7 @@ Backend (`backend/.env`):
 DATABASE_URL
 SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY
-FINNHUB_API_KEY
+FMP_API_KEY
 FRED_API_KEY
 MARKETAUX_API_KEY
 OPENAI_API_KEY
@@ -956,10 +1101,22 @@ EXPO_PUBLIC_API_BASE_URL
 
 ## Next Steps
 
-1. Begin Milestone 12 — Finnhub Service, the first milestone integrating a real external API.
-   Not yet scoped — start with Phase 1 (Understand the Milestone). Expect the same kind of
-   account/API-key workflow shift Milestone 6 first introduced for Supabase.
-2. Decide whether/how to wire `pytest` into CI (see Known Issues) — needs a decision on test
+1. **Rewrite `backend/app/services/fmp_service.py` from scratch** around the agreed design (market
+   snapshot, sector movers, company spotlight) — the current file's dead Finnhub code and rough
+   test snippet should be removed, not patched. Create the new `IndexQuote`/`SectorPerformance`/
+   `CompanySpotlight` schemas (field shapes are specified in the Milestone 12 section above) —
+   likely in `schemas/market_data.py`, replacing the now-unused `schemas/economic_event.py`
+   (decide whether to delete `economic_event.py`/the `EconomicEvent` model at this point).
+   Pseudocode/implementation is the user's to write, per the Milestone 10 working agreement;
+   Claude reviews.
+2. **Have the downstream pipeline design conversation** (Milestones 13/16/18/20) before starting
+   Milestone 13 — the old "events flow through FRED/Marketaux/OpenAI" design doesn't fit
+   Milestone 12's new output shape. Don't assume the old pipeline design still applies.
+3. **Reframe `docs/01-product-requirements.md` §10** (MVP Definition) to match the market-data
+   pivot — deferred as its own conversation, separate from the Milestone 12 implementation work.
+4. Rotate the FMP API key (briefly exposed in a terminal error message during testing) as a
+   precaution.
+5. Decide whether/how to wire `pytest` into CI (see Known Issues) — needs a decision on test
    database strategy before it's a simple config change.
-3. Continue Milestones 12–26 — Core Backend (Part 2).
-4. Begin Milestones 27–40 — Mobile App (Part 3).
+6. Continue Milestones 12–26 — Core Backend (Part 2).
+7. Begin Milestones 27–40 — Mobile App (Part 3).
