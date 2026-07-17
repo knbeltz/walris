@@ -1,7 +1,8 @@
 # Walris Resume Prompt
 
 **Document:** docs/06-resume-prompt.md
-**Last Updated:** 2026-07-16 (Milestone 12 in progress — updated mid-milestone, see below)
+**Last Updated:** 2026-07-17 (Milestone 12 implementation complete and verified; formal sign-off
+and Milestone 13+ re-scoping still pending — see below)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -115,46 +116,58 @@ requirements.md` §10 (MVP Definition) also still describes the product around "
 economic events" and needs a matching reframe — deliberately deferred as its own separate
 conversation, not done as part of this docs cleanup pass.
 
-### Current implementation state
+### Current implementation state — Milestone 12 is functionally DONE, not yet formally signed off
 
-- `backend/app/services/fmp_service.py` exists but is **not in a working state** — it currently
-  contains the entire old Finnhub implementation sitting inertly inside a `'''...'''` triple-quoted
-  string (dead code, including a reference to `settings.finnhub_api_key`, which no longer exists
-  as a `Settings` field), followed by a rough diagnostic test snippet used to explore FMP's raw
-  response shape. **Needs a full rewrite**, not a patch — one function per data category (market
-  snapshot, sector movers, company spotlight) was the agreed direction, each returning its own
-  typed schema object.
-- `backend/app/schemas/economic_event.py` (the `EconomicEvent` Pydantic schema) is now **unused
-  dead weight** from the abandoned calendar scope — not yet deleted, decision deferred to whenever
-  the FMP rewrite actually happens.
-- New schemas agreed on but **not yet created**: `IndexQuote` (`symbol`, `name`, `price`, `change`,
-  `change_percentage`), `SectorPerformance` (`sector`, `average_change`, `date`), `CompanySpotlight`
-  (`symbol`, `name`, `price`, `change`, `change_percentage`, `market_cap`,
-  `direction: Literal["gainer", "loser"]`). Field-naming gotcha to remember while writing the
-  normalization logic: FMP's raw `quote` endpoint uses `changePercentage`, but
-  `biggest-gainers`/`biggest-losers` use `changesPercentage` (extra "s") — easy to typo.
-- `backend/app/core/config.py` / `backend/.env.example` — already updated: `finnhub_api_key` field
-  removed, `fmp_api_key` added and confirmed working (`Settings` loads it correctly). Real
-  `backend/.env` has a real, working `FMP_API_KEY` (gitignored, not committed).
-- **Known key exposure:** the FMP key was briefly printed into a terminal error message during
-  ad-hoc testing (an `httpx` exception's default string representation includes the full request
-  URL, which contains `apikey=...` as a query param) — same category of incident as the Milestone
-  6 Supabase key exposure. Worth rotating the FMP key from the dashboard as a precaution, same as
-  recommended (but not yet confirmed done) for Supabase back then.
-- `docs/02-system-architecture.md` and `docs/03-development-roadmap.md` (Milestone 12 section)
-  have been updated to reflect the FMP pivot as of this doc update. Two references were
-  **deliberately left unchanged** in `02-system-architecture.md`, tied to the unresolved downstream
-  pipeline question above: §5's data-flow diagram (still says "Fetch today's economic calendar
-  from Finnhub" and describes matching events to FRED/searching news per event) and the
-  `economic_events` table description under §12 (still says "Stores normalized economic event data
-  from Finnhub") — both need the real Milestone 13+ design conversation, not a mechanical
-  word-swap, since it's not yet decided whether an `economic_events`-shaped table is still the
-  right model at all.
+- **`backend/app/services/fmp_service.py` is complete and verified working end-to-end against the
+  real, live FMP API** (2026-07-17): `fetch_market_snapshot`, `fetch_sector_performance`,
+  `pick_best_and_worst`, `fetch_top_gainer_spotlight`, `fetch_top_loser_spotlight`. Passes
+  `ruff check`, `ruff format --check`, and `mypy --strict` clean. A real test run returned real
+  data (S&P 500/Dow/Nasdaq quotes, all 11 sectors with Technology best/Consumer Defensive worst,
+  and a genuine real-world validation of the "don't show if nothing clears $10B" design: the top
+  gainer came back `None` that day, while the top loser correctly surfaced Intuitive Surgical
+  (ISRG), a real $124B company down 13% — not an obscure penny stock, which was the whole point of
+  the market-cap filter). Committed as `271b612`.
+- `backend/app/schemas/fmp_data.py` — `IndexQuote`, `SectorPerformance`, `CompanySpotlight`, all
+  matching the implementation exactly. Replaced (and the file itself renamed from) the abandoned
+  `economic_event.py`/`EconomicEvent` — that dead weight is gone, not just unused.
+- `backend/app/core/config.py` / `backend/.env.example` — `fmp_api_key` wired and confirmed
+  working. Real `backend/.env` has a real, working `FMP_API_KEY` (gitignored, not committed).
+- **Still open, not yet done:**
+  - **Key rotation** — the FMP key was briefly printed into a terminal error message during
+    ad-hoc testing early in this milestone (same category as the Milestone 6 Supabase key
+    exposure). Worth rotating from the FMP dashboard; not yet confirmed done.
+  - **Formal sign-off** — `docs/03-development-roadmap.md`'s Milestone 12 section was updated
+    *during* the pivot (objective/deliverables/acceptance criteria), but this resume-prompt doc's
+    "Completed Milestones" checklist still doesn't list Milestone 12, and there's no
+    "Milestone 12 (complete)" write-up yet in the style of Milestones 3-11 below. Do this once the
+    downstream-pipeline question (next bullet) is at least scoped, so the sign-off reflects the
+    final shape of things.
+  - **The big one: Milestones 13/16/18/20 need a full re-scoping conversation, not just a
+    rename.** These were designed around discrete "events" flowing through the pipeline (fetch
+    events → match to FRED series → search news per event → rank with OpenAI) — Milestone 13
+    specifically ("Store Finnhub Events") is entirely about persisting/deduplicating/filtering
+    events, none of which fits Milestone 12's actual output anymore (a market snapshot + sector
+    movers + a company spotlight, no discrete events at all). **This is explicitly the next thing
+    to tackle when picking this back up** — work out what the app's remaining milestones should
+    actually be, given the FMP pivot, before writing any more code. Likely touches: what
+    persistence looks like (probably `index_quotes`/`sector_performance`/`company_spotlights`
+    tables instead of `economic_events`, using natural `(symbol/sector, date)` keys instead of a
+    synthetic event ID — no hashing needed this time, see Important Decisions), what Milestone 16
+    (FRED)/18 (Marketaux)/20 (OpenAI) even mean without discrete events to enrich, and whether
+    `docs/02-system-architecture.md` §5's data-flow diagram and the `economic_events` table under
+    §12 (both deliberately left un-updated during the mechanical docs pass) still make sense at
+    all.
+  - `docs/01-product-requirements.md` §10 (MVP Definition) still describes "five most important
+    economic events" — also deferred, likely resolved together with the milestone re-scoping
+    above rather than as a separate pass.
 
 Working agreement from Milestone 10 (user writes pseudocode/implementation, Claude handles
-configuration/tooling + technical edge cases + Phases 1/5/6/7) held throughout this pivot — all of
-the FMP endpoint testing/verification above was done directly in a shared back-and-forth, not
-written as unreviewed code by either side alone.
+configuration/tooling + technical edge cases + Phases 1/5/6/7) held throughout this pivot and the
+full implementation — review caught several real bugs along the way (wrong `Settings` field names
+repeating a pattern from the Finnhub version, a copy-pasted Finnhub URL left in a new constant, an
+`httpx.Client()` connection-reuse optimization that initially didn't reach the code it was meant
+to help, a `client.HTTPError`/`httpx.HTTPError` typo) — all found and fixed through review, then
+verified against the real API, not just type-checked.
 
 ### Milestone 11 — Database Models & Migrations (complete)
 
@@ -1101,22 +1114,25 @@ EXPO_PUBLIC_API_BASE_URL
 
 ## Next Steps
 
-1. **Rewrite `backend/app/services/fmp_service.py` from scratch** around the agreed design (market
-   snapshot, sector movers, company spotlight) — the current file's dead Finnhub code and rough
-   test snippet should be removed, not patched. Create the new `IndexQuote`/`SectorPerformance`/
-   `CompanySpotlight` schemas (field shapes are specified in the Milestone 12 section above) —
-   likely in `schemas/market_data.py`, replacing the now-unused `schemas/economic_event.py`
-   (decide whether to delete `economic_event.py`/the `EconomicEvent` model at this point).
-   Pseudocode/implementation is the user's to write, per the Milestone 10 working agreement;
-   Claude reviews.
-2. **Have the downstream pipeline design conversation** (Milestones 13/16/18/20) before starting
-   Milestone 13 — the old "events flow through FRED/Marketaux/OpenAI" design doesn't fit
-   Milestone 12's new output shape. Don't assume the old pipeline design still applies.
-3. **Reframe `docs/01-product-requirements.md` §10** (MVP Definition) to match the market-data
-   pivot — deferred as its own conversation, separate from the Milestone 12 implementation work.
-4. Rotate the FMP API key (briefly exposed in a terminal error message during testing) as a
-   precaution.
-5. Decide whether/how to wire `pytest` into CI (see Known Issues) — needs a decision on test
+1. **PRIORITY when resuming: re-scope Milestones 13/16/18/20 (and check §10 of the product
+   requirements doc) against the FMP pivot, before writing any more code.** Milestone 12's
+   implementation is done and verified (see above) — the very next task is a planning
+   conversation, not implementation. Milestone 13 as currently written ("Store Finnhub Events")
+   is entirely about persisting/deduplicating discrete events, which no longer exist in the
+   pipeline. Work out what the app's remaining milestones should actually be: what gets persisted
+   and how (likely `index_quotes`/`sector_performance`/`company_spotlights` tables, not
+   `economic_events`), what Milestone 16 (FRED)/18 (Marketaux)/20 (OpenAI) mean without discrete
+   events to enrich, and whether `docs/02-system-architecture.md` §5's data-flow diagram and the
+   `economic_events` table under §12 still make sense. `docs/01-product-requirements.md` §10 (MVP
+   Definition, still describing "five most important economic events") likely gets resolved
+   together with this, not as a separate pass.
+2. Once the re-scoping is settled, **formally sign off Milestone 12** — add it to the "Completed
+   Milestones" checklist above and write its own "(complete)" section in the style of Milestones
+   3-11 below, summarizing the pivot/decisions/bugs-caught the same way those do.
+3. Rotate the FMP API key (briefly exposed in a terminal error message during testing) as a
+   precaution — still not confirmed done.
+4. Decide whether/how to wire `pytest` into CI (see Known Issues) — needs a decision on test
    database strategy before it's a simple config change.
-6. Continue Milestones 12–26 — Core Backend (Part 2).
-7. Begin Milestones 27–40 — Mobile App (Part 3).
+5. Continue Milestones 12–26 — Core Backend (Part 2), shaped by whatever the re-scoping in #1
+   decides.
+6. Begin Milestones 27–40 — Mobile App (Part 3).
