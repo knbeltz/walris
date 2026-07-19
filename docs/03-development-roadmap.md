@@ -638,639 +638,131 @@ spotlight.
 
 ---
 
-## Milestone 13 — Store Finnhub Events
+## Milestones 13–22 — Personalization Pivot
 
-### Objective
+**Replaces the original Milestones 13-24** (which were built around Finnhub's abandoned discrete
+economic-events calendar). Full plan, reasoning, verified FRED series IDs, and category/indicator
+mapping: `docs/09-personalization-pivot-plan.md`. Summary of each milestone below; expand each
+into full Objective/Deliverables/Acceptance-Criteria detail when it's actually started, same
+mentor workflow as every prior milestone.
 
-Persist normalized Finnhub events in Supabase.
+### Milestone 13 — User Accounts & Clerk Integration
 
-### Deliverables
+`users` table + migration, Clerk backend token-verification dependency, new `Settings` fields
+(`clerk_secret_key`, `clerk_publishable_key`), mobile Clerk SDK + sign-up/sign-in screens.
 
-Implement:
+### Milestone 14 — Category & Topic Selection
 
-- Event repository logic
-- Insert/update behavior
-- Duplicate prevention
-- Basic event filtering
+`category`/`additional_topics` columns on `users`, the category-selection and additional-topics
+onboarding screens (new single-select and multi-select UI primitives needed),
+`GET/PUT /v1/users/me/preferences` endpoint, a settings screen for changing these later.
 
-### Acceptance Criteria
+### Milestone 15 — FRED Service
 
-- Today's events can be fetched and stored.
-- Duplicate records are not created on repeated runs.
-- Events are associated with a briefing date.
+`services/fred_service.py` — fetch latest values for the 39 verified indicators in
+`docs/09-personalization-pivot-plan.md` §5.
 
-### Definition of Done
+### Milestone 16 — Marketaux Service
 
-Finnhub data is now stored in the database.
+`services/marketaux_service.py` — one same-day recency-filtered search per data field (up to 55
+calls/day across all 39 FRED indicators + 16 FMP fields), gracefully handling zero-result days.
 
-### Suggested Commit
+### Milestone 17 — Daily Data Pipeline & Storage
 
-`feat: store economic events in database`
+`daily_data_items`/`daily_data_news` tables + migrations, the fetch-and-filter steps (FMP fetch →
+FRED fetch → Marketaux fetch → drop fields with no fresh coverage), and the 48-hour deletion
+mechanism for this temporary data.
 
-### Claude Code Tutor Prompt
+### Milestone 18 — Per-User OpenAI Briefing Generation
 
-> Help me store normalized Finnhub events in Supabase using SQLAlchemy. Explain how to avoid
-> duplicate event records.
+`services/openai_service.py`, `user_briefings` table + migration — one OpenAI call per registered
+user, filtering the day's dataset to that user's category + additional topics.
 
----
+### Milestone 19 — Daily Briefing Orchestrator
 
-## Milestone 14 — Events API Endpoint
+`services/briefing_service.py` wiring Milestones 15-18 (plus Milestone 12's existing
+`fmp_service.py`) together end to end; one `job_runs` row per run.
 
-### Objective
+### Milestone 20 — Personalized Briefing API
 
-Expose stored economic events through FastAPI.
+Endpoint serving a signed-in user's own `user_briefings` row for today, replacing the old
+single-briefing `GET /briefings/today` design (now authenticated, per-user).
 
-### Deliverables
+### Milestone 21 — Personalized Notifications
 
-Create endpoint: `GET /events/today`
+`device_tokens.user_id` migration, notification copy that reflects the user's own briefing
+content instead of a single hardcoded string.
 
-Response should include:
+### Milestone 22 — Backend Integration Test Pass
 
-```text
-event_id
-event_name
-country
-release_time
-actual_value
-forecast_value
-previous_value
-unit
-source
-```
-
-### Acceptance Criteria
-
-- Endpoint returns today's stored events.
-- Response uses Pydantic schemas.
-- Empty states are handled cleanly.
-
-### Definition of Done
-
-Mobile app can request today's raw events.
-
-### Suggested Commit
-
-`feat: add today events endpoint`
-
-### Claude Code Tutor Prompt
-
-> Help me create a FastAPI endpoint for today's economic events. Explain request handling,
-> response models, and error states.
+End-to-end verification of the full new pipeline (equivalent to the original roadmap's old
+Milestone 26).
 
 ---
 
-## Milestone 15 — FRED Series Mapping
+## Milestone 23 — Scheduled Personalization Job
 
 ### Objective
 
-Create a mapping between major economic events and FRED series IDs.
+Automate the daily pipeline (Milestones 15-19) so it runs without manual intervention, generating
+every registered user's personalized briefing automatically.
 
 ### Deliverables
 
-Create: `services/fred_series_map.py`
+Implement scheduled job using APScheduler, or hosted cron calling an admin-triggered endpoint that
+runs the full `briefing_service.py` orchestration (FMP + FRED + Marketaux fetch, per-user OpenAI
+generation, notification dispatch, and scheduling the 48-hour data cleanup).
 
-Initial mappings:
-
-```text
-CPI → CPIAUCSL
-Core CPI → CPILFESL
-Unemployment Rate → UNRATE
-Federal Funds Rate → FEDFUNDS
-GDP → GDP
-Retail Sales → RSAFS
-Housing Starts → HOUST
-Consumer Sentiment → UMCSENT
-Industrial Production → INDPRO
-```
+Recommended schedule: pipeline completes well before 7:00 AM daily notification delivery
+(`docs/02-system-architecture.md` §23).
 
 ### Acceptance Criteria
 
-- Major event names can be matched to FRED series.
-- Unmatched events are handled gracefully.
-- Mapping is easy to extend.
+- The job runs automatically and produces a `user_briefings` row for every registered user.
+- Job execution is logged, visible in `job_runs`.
+- A failure generating one user's briefing doesn't block the rest.
+- Manual trigger still works for testing.
 
 ### Definition of Done
 
-Walris can determine which events should receive FRED context.
+Walris can generate every user's personalized daily briefing without manual intervention.
 
 ### Suggested Commit
 
-`feat: add FRED series mapping`
+`feat: schedule daily personalization pipeline`
 
 ### Claude Code Tutor Prompt
 
-> Help me design a flexible mapping system between economic event names and FRED series IDs.
-> Explain how to make it maintainable.
-
----
-
-## Milestone 16 — FRED Service
-
-### Objective
-
-Fetch historical economic data from FRED.
-
-### Deliverables
-
-Create:
-
-```text
-services/fred_service.py
-schemas/fred_series.py
-```
-
-Service should:
-
-- Fetch observations from FRED
-- Parse latest values
-- Calculate previous value
-- Calculate trend direction
-- Optionally calculate long-term average
-
-### Acceptance Criteria
-
-- Service returns clean historical context.
-- API errors are handled.
-- Missing data does not break briefing generation.
-
-### Definition of Done
-
-Backend can retrieve historical context for supported events.
-
-### Suggested Commit
-
-`feat: integrate FRED historical data`
-
-### Claude Code Tutor Prompt
-
-> Help me build the FRED service for Walris. Explain how to fetch time-series data and turn it
-> into useful historical context.
-
----
-
-## Milestone 17 — Store FRED Context
-
-### Objective
-
-Persist FRED historical context for events.
-
-### Deliverables
-
-Store:
-
-```text
-series_id
-series_name
-latest_value
-previous_value
-ten_year_average
-historical_percentile
-trend_direction
-data_points
-```
-
-### Acceptance Criteria
-
-- FRED data is linked to economic events.
-- Events without FRED data still work.
-- Stored data can be retrieved for event detail pages.
-
-### Definition of Done
-
-Economic events can now include historical context.
-
-### Suggested Commit
-
-`feat: store FRED context for events`
-
-### Claude Code Tutor Prompt
-
-> Help me store FRED historical context in the database and link it to economic events. Explain
-> how to model optional data relationships.
-
----
-
-## Milestone 18 — Marketaux Service
-
-### Objective
-
-Create the service for related financial news coverage.
-
-### Deliverables
-
-Create:
-
-```text
-services/marketaux_service.py
-schemas/news_article.py
-```
-
-Service should:
-
-- Search articles by event name and country
-- Limit to relevant financial/economic articles
-- Normalize article metadata
-- Extract headline, source, URL, published time, sentiment, entities, and topics
-
-### Acceptance Criteria
-
-- Marketaux service returns normalized article objects.
-- Low-relevance or missing article results are handled.
-- API errors do not stop the full pipeline.
-
-### Definition of Done
-
-Backend can retrieve news context for economic events.
-
-### Suggested Commit
-
-`feat: integrate Marketaux news service`
-
-### Claude Code Tutor Prompt
-
-> Help me build the Marketaux service for Walris. Explain how to search for related news and
-> normalize article metadata.
-
----
-
-## Milestone 19 — Store News Articles
-
-### Objective
-
-Persist Marketaux article metadata.
-
-### Deliverables
-
-Store:
-
-```text
-headline
-source
-url
-published_at
-summary
-sentiment
-entities
-topics
-```
-
-### Acceptance Criteria
-
-- News articles are linked to economic events.
-- Duplicate articles are not repeatedly inserted.
-- Related articles are queryable from event detail endpoint.
-
-### Definition of Done
-
-Walris can store and retrieve related news coverage.
-
-### Suggested Commit
-
-`feat: store related news articles`
-
-### Claude Code Tutor Prompt
-
-> Help me store Marketaux news articles and prevent duplicates. Explain how article URLs can be
-> used as unique identifiers.
-
----
-
-## Milestone 20 — OpenAI Enrichment Service
-
-### Objective
-
-Create the OpenAI service that generates structured economic explanations.
-
-### Deliverables
-
-Create:
-
-```text
-services/openai_service.py
-schemas/enrichment.py
-```
-
-OpenAI should generate:
-
-```text
-importance_score
-importance_reason
-plain_english_summary
-historical_context_summary
-news_context_summary
-affected_groups
-```
-
-### Acceptance Criteria
-
-- OpenAI returns structured JSON.
-- Output is validated before storage.
-- Invalid output triggers retry or fallback.
-- OpenAI does not invent source data.
-
-### Definition of Done
-
-Walris can enrich raw event data into user-facing explanations.
-
-### Suggested Commit
-
-`feat: add OpenAI event enrichment service`
-
-### Claude Code Tutor Prompt
-
-> Help me build an OpenAI enrichment service for Walris. Focus on structured outputs, validation,
-> and hallucination prevention.
-
----
-
-## Milestone 21 — Enriched Event Storage
-
-### Objective
-
-Store AI-generated enrichment results.
-
-### Deliverables
-
-Persist:
-
-```text
-importance_score
-importance_reason
-plain_english_summary
-historical_context_summary
-news_context_summary
-affected_groups
-```
-
-### Acceptance Criteria
-
-- Enriched summaries are linked to economic events.
-- Invalid AI output is not stored.
-- Existing enrichment can be updated on rerun.
-
-### Definition of Done
-
-Economic events now have user-facing summaries.
-
-### Suggested Commit
-
-`feat: store enriched event summaries`
-
-### Claude Code Tutor Prompt
-
-> Help me store OpenAI enrichment results in the database. Explain how to validate AI output
-> before persistence.
-
----
-
-## Milestone 22 — Daily Briefing Generator
-
-### Objective
-
-Create the orchestration service that generates the full daily briefing.
-
-### Deliverables
-
-Create: `services/briefing_service.py`
-
-Pipeline:
-
-```text
-Fetch Finnhub events
-  ↓
-Store economic events
-  ↓
-Fetch FRED context
-  ↓
-Store FRED context
-  ↓
-Fetch Marketaux news
-  ↓
-Store news articles
-  ↓
-Generate OpenAI enrichments
-  ↓
-Rank top 5 events
-  ↓
-Create daily briefing summary
-  ↓
-Store completed briefing
-```
-
-### Acceptance Criteria
-
-- One function can generate a full briefing for a date.
-- Job status is stored in `job_runs`.
-- Partial failures are handled gracefully.
-- Briefing generation can be manually triggered.
-
-### Definition of Done
-
-Backend can generate a complete Walris daily briefing.
-
-### Suggested Commit
-
-`feat: implement daily briefing generator`
-
-### Claude Code Tutor Prompt
-
-> Help me build the daily briefing orchestration service. Explain how to structure a data
-> pipeline with external APIs, retries, and partial failure handling.
-
----
-
-## Milestone 23 — Briefing API Endpoint
-
-### Objective
-
-Expose completed briefings to the mobile app.
-
-### Deliverables
-
-Create endpoint: `GET /briefings/today`
-
-Response should include:
-
-```text
-briefing_date
-title
-summary
-top_events[]
-```
-
-Each event should include:
-
-```text
-event_id
-event_name
-country
-release_time
-actual_value
-forecast_value
-previous_value
-importance_score
-plain_english_summary
-affected_groups
-```
-
-### Acceptance Criteria
-
-- Endpoint returns today's completed briefing.
-- If no briefing exists, endpoint returns controlled empty state.
-- Response is validated with Pydantic.
-
-### Definition of Done
-
-Mobile app can fetch the main Walris daily briefing.
-
-### Suggested Commit
-
-`feat: add today briefing endpoint`
-
-### Claude Code Tutor Prompt
-
-> Help me create the today briefing endpoint. Explain how to design response models that are easy
-> for the mobile app to consume.
-
----
-
-## Milestone 24 — Event Detail API Endpoint
-
-### Objective
-
-Expose full event details.
-
-### Deliverables
-
-Create endpoint: `GET /events/{event_id}`
-
-Response should include:
-
-```text
-event metadata
-importance explanation
-plain-English summary
-historical context
-news context
-affected groups
-related articles
-```
-
-### Acceptance Criteria
-
-- Endpoint returns complete event detail.
-- Missing FRED or Marketaux data is handled gracefully.
-- Response shape is stable and frontend-friendly.
-
-### Definition of Done
-
-Mobile app can power the event detail screen.
-
-### Suggested Commit
-
-`feat: add event detail endpoint`
-
-### Claude Code Tutor Prompt
-
-> Help me design the event detail endpoint for Walris. Explain how to aggregate related database
-> records into one clean API response.
-
----
-
-## Milestone 25 — Scheduled Briefing Job
-
-### Objective
-
-Automate daily briefing generation.
-
-### Deliverables
-
-Implement scheduled job using APScheduler, or hosted cron calling `POST /admin/generate-briefing`.
-
-Recommended schedule: 6:00 AM ET daily
-
-### Acceptance Criteria
-
-- Briefing job runs automatically.
-- Job execution is logged.
-- Failed jobs are visible in `job_runs`.
-- Manual trigger still works.
-
-### Definition of Done
-
-Walris can generate daily briefings without manual intervention.
-
-### Suggested Commit
-
-`feat: schedule daily briefing generation`
-
-### Claude Code Tutor Prompt
-
-> Help me schedule the daily briefing generation job. Explain the tradeoffs between APScheduler
-> and hosted cron.
-
----
-
-## Milestone 26 — Backend Integration Test Pass
-
-### Objective
-
-Verify the full backend pipeline works end-to-end.
-
-### Deliverables
-
-Test:
-
-```text
-Finnhub fetch
-FRED fetch
-Marketaux fetch
-OpenAI enrichment
-Supabase storage
-Briefing retrieval
-Event detail retrieval
-```
-
-### Acceptance Criteria
-
-- Full briefing can be generated locally or in staging.
-- `/briefings/today` returns enriched events.
-- `/events/{event_id}` returns full event detail.
-- Major error states are logged.
-
-### Definition of Done
-
-Core backend is ready for mobile integration.
-
-### Suggested Commit
-
-`test: validate core backend pipeline`
-
-### Claude Code Tutor Prompt
-
-> Help me test the full Walris backend pipeline end to end. Explain what integration tests matter
-> most before connecting the mobile app.
+> Help me schedule the daily personalization pipeline. Explain how to keep one user's failure from
+> blocking everyone else's briefing generation.
 
 ---
 
 ## Core Backend Phase Complete
 
-After Milestone 26, Walris will have:
+After Milestone 23 (of the personalization pivot — see `docs/09-personalization-pivot-plan.md`),
+Walris will have:
 
-- Supabase schema
-- Finnhub economic event ingestion
-- FRED historical context
+- Supabase schema including user accounts and preferences
+- Clerk authentication
+- FMP market data (Milestone 12)
+- FRED historical indicators
 - Marketaux news context
-- OpenAI event enrichment
-- Daily briefing generation
-- Today briefing endpoint
-- Event detail endpoint
-- Scheduled backend job
+- Per-user OpenAI briefing generation
+- Personalized briefing API
+- Personalized notifications
+- Scheduled, automated daily pipeline
 - End-to-end backend validation
 
-At this point, Walris has its core intelligence engine.
+At this point, Walris has its core personalized intelligence engine.
 
-The next phase should focus on building the mobile app experience that consumes this backend.
+The next phase should focus on building the mobile app experience that consumes this backend —
+**note: the milestone numbers below (formerly 27+) have not been renumbered to close the gap left
+by replacing the old 12-milestone event pipeline with this pivot's 11 milestones (13-23). More
+importantly, Milestones 27-45 as written still assume no authentication and one shared global
+briefing throughout — they need their own re-scoping pass against this pivot (sign-up/onboarding
+screens, per-user data fetching, personalized notification copy) before being started as-is. Don't
+treat the content below as current without that review.**
 
 ---
 

@@ -1,8 +1,9 @@
 # Walris Resume Prompt
 
 **Document:** docs/06-resume-prompt.md
-**Last Updated:** 2026-07-17 (Milestone 12 implementation complete and verified; formal sign-off
-and Milestone 13+ re-scoping still pending — see below)
+**Last Updated:** 2026-07-19 (Milestone 13+ re-scoped into a full personalization pivot — see
+`docs/09-personalization-pivot-plan.md`; Milestone 12 formal sign-off still pending; no
+implementation of the pivot has started yet)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -32,12 +33,19 @@ The backend now has its first real automated tests: `pytest` is installed and co
 three tests in `backend/tests/test_models.py` prove the SQLAlchemy model layer actually creates,
 queries, and cascade-deletes real rows against the live Supabase database — not just that a raw
 `SELECT 1` succeeds, which is all `GET /health` ever proved. No real screens/data fetching beyond
-the Milestone 10 health check exist yet — that's later milestones. Milestone 12 is currently
-**in progress and mid-pivot**: the roadmap's original "Finnhub Service" scope turned out to be
-unbuildable on a free/personal-use basis (see the Milestone 12 section below for the full story),
-and has been redesigned around Financial Modeling Prep's (FMP) free-tier market-data endpoints
-instead. This document was updated now, mid-milestone rather than at completion, specifically so a
-new session has full context if this conversation gets cleared before the milestone is finished.
+the Milestone 10 health check exist yet — that's later milestones. Milestone 12 is **implemented
+and verified** (the roadmap's original "Finnhub Service" scope turned out to be unbuildable on a
+free/personal-use basis — see the Milestone 12 section below for the full story — and was
+redesigned around Financial Modeling Prep's (FMP) free-tier market-data endpoints instead), though
+formal sign-off (updating the checklist below, writing its own "(complete)" section) is still
+pending. **Since then, the project has undergone a much bigger pivot**: instead of one identical
+briefing for everyone, Walris now plans a personalized daily briefing — users sign up (Clerk),
+pick one of 7 categories, optionally add extra topics, and get an individually-generated briefing
+built from FRED + FMP + Marketaux + OpenAI. This is fully planned in
+**`docs/09-personalization-pivot-plan.md`** (verified FRED series IDs, database schema, service
+architecture, mobile changes, and a full milestone breakdown) and reflected in `docs/01`, `docs/02`,
+and `docs/03`. **No implementation of this pivot has started yet** — the next actual coding work
+is Milestone 13 (User Accounts & Clerk Integration) per that plan.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -642,6 +650,16 @@ Full mentor workflow (Phases 1–7) was followed end to end. Summary for future 
 
 ## Important Decisions
 
+- **Personalization pivot (2026-07-19):** Walris moved from "one identical briefing for everyone"
+  to a per-user personalized briefing — users sign up (Clerk, pulled into V1 from its originally
+  planned V2 slot), pick one of 7 categories, optionally add extra topics, and get an
+  individually-generated OpenAI briefing built from 39 verified FRED indicators + Milestone 12's
+  FMP data + Marketaux news (55 calls/day, one per data field, same-day-recency-filtered). Data is
+  temporary (48-hour deletion), not a permanent historical archive. Full plan, reasoning, and
+  milestone breakdown: `docs/09-personalization-pivot-plan.md`. This is reflected in `docs/01`
+  §1/§10/§11, `docs/02` (auth, data flow, database tables, caching, security — extensively
+  rewritten), and `docs/03` (Milestones 13-23 fully replaced; Milestones 27+ flagged as needing
+  their own re-scoping pass before being started).
 - Monorepo: `mobile/` and `backend/` live in one repository (see Engineering Journal Decision Log
   for full rationale).
 - Backend: FastAPI + Pydantic + SQLAlchemy + Alembic.
@@ -1114,25 +1132,22 @@ EXPO_PUBLIC_API_BASE_URL
 
 ## Next Steps
 
-1. **PRIORITY when resuming: re-scope Milestones 13/16/18/20 (and check §10 of the product
-   requirements doc) against the FMP pivot, before writing any more code.** Milestone 12's
-   implementation is done and verified (see above) — the very next task is a planning
-   conversation, not implementation. Milestone 13 as currently written ("Store Finnhub Events")
-   is entirely about persisting/deduplicating discrete events, which no longer exist in the
-   pipeline. Work out what the app's remaining milestones should actually be: what gets persisted
-   and how (likely `index_quotes`/`sector_performance`/`company_spotlights` tables, not
-   `economic_events`), what Milestone 16 (FRED)/18 (Marketaux)/20 (OpenAI) mean without discrete
-   events to enrich, and whether `docs/02-system-architecture.md` §5's data-flow diagram and the
-   `economic_events` table under §12 still make sense. `docs/01-product-requirements.md` §10 (MVP
-   Definition, still describing "five most important economic events") likely gets resolved
-   together with this, not as a separate pass.
-2. Once the re-scoping is settled, **formally sign off Milestone 12** — add it to the "Completed
-   Milestones" checklist above and write its own "(complete)" section in the style of Milestones
-   3-11 below, summarizing the pivot/decisions/bugs-caught the same way those do.
+1. **PRIORITY when resuming: start implementing Milestone 13 (User Accounts & Clerk Integration)
+   per `docs/09-personalization-pivot-plan.md`.** The re-scoping work is done — `docs/09` has the
+   full plan (verified FRED series IDs, database schema, service architecture, mobile changes,
+   milestone breakdown), and `docs/01`/`docs/02`/`docs/03` have all been updated to reflect it.
+   Full mentor workflow (Phase 1-7) applies to M13 same as every prior milestone. Note:
+   `docs/03-development-roadmap.md`'s Milestones 27+ (mobile UI, notifications) have an explicit
+   flag noting they still assume no-auth/single-global-briefing and need their own re-scoping pass
+   before being started as-is — not urgent until Milestone 22ish is reached, but don't skip it
+   when the time comes.
+2. **Formally sign off Milestone 12** — add it to the "Completed Milestones" checklist above and
+   write its own "(complete)" section in the style of Milestones 3-11 below, summarizing the
+   pivot/decisions/bugs-caught the same way those do. Reasonable to do alongside #1 or separately.
 3. Rotate the FMP API key (briefly exposed in a terminal error message during testing) as a
    precaution — still not confirmed done.
 4. Decide whether/how to wire `pytest` into CI (see Known Issues) — needs a decision on test
    database strategy before it's a simple config change.
-5. Continue Milestones 12–26 — Core Backend (Part 2), shaped by whatever the re-scoping in #1
-   decides.
-6. Begin Milestones 27–40 — Mobile App (Part 3).
+5. Continue the personalization pivot Milestones 13-23 per `docs/09`.
+6. Once the personalization pivot's backend is complete, revisit and re-scope Milestones 27+
+   (Mobile App, Notifications) against it before starting them.

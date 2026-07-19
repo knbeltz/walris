@@ -31,9 +31,10 @@ Walris is not designed to replace professional financial terminals or real-time 
 platforms. Instead, it serves as an interpretation layer that transforms complex economic
 information into concise, trustworthy, and actionable insights.
 
-The initial release focuses on one experience: a daily briefing of the five most important
-economic events generated from trusted public data sources and enriched with AI-powered
-explanations.
+The initial release focuses on one experience: a daily briefing personalized to the user's
+selected category (Investors, Small Business Owners/Entrepreneurs, Consumers, Home Owners/Home
+Buyers, Students, Job Seekers, or "I Want Everything"), generated from trusted public data sources
+(FRED, Financial Modeling Prep, Marketaux) and enriched with AI-powered explanations.
 
 ### 2. Vision Statement
 
@@ -238,33 +239,31 @@ concise writing, and intentional prioritization.
 
 ### 10. MVP Product Definition
 
-Version 1 focuses on a single experience:
+Version 1 focuses on a personalized daily briefing:
 
-**Today's Economic Briefing**
+**Your Economic Briefing**
 
-Every morning, Walris generates a briefing containing the five most important macroeconomic
-events of the day.
+Users create an account (via Clerk) and select the one category that best describes them:
+Investors, Small Business Owners/Entrepreneurs, Consumers, Home Owners/Home Buyers, Students, Job
+Seekers, or "I Want Everything." Users may optionally add extra topics on top of their category
+(Inflation, Employment and Labor, Economic Growth, Housing, Consumer Costs, Major Market Indices,
+Industry Sector Performance, Company Spotlights).
 
-Each event includes:
+Every morning, Walris generates an individually-tailored briefing for each user, built from:
 
-- Importance score
-- Plain-English explanation
-- Actual vs. forecast comparison
-- Historical context
-- News interpretation
-- Affected groups
-- Links to original reporting
+- Federal Reserve Economic Data (FRED) — the macroeconomic indicators relevant to their category
+- Financial Modeling Prep (FMP) — market indices, sector performance, and a notable company
+  spotlight
+- Marketaux — recent news tied to whichever indicators had fresh coverage that day
+- OpenAI — a plain-English explanation synthesizing the above into their personal briefing
 
-Users receive a morning push notification encouraging them to review the day's briefing.
+Users receive a morning push notification with their briefing. Preferences (category and
+additional topics) can be changed anytime from a settings screen.
 
-No account is required.
-
-No personalization is required.
-
-No watchlists or portfolios are included.
+See `docs/09-personalization-pivot-plan.md` for the full technical plan behind this.
 
 The MVP succeeds if users consistently return because Walris is the fastest way to understand
-what matters in the economy each morning.
+what matters in the economy — for their specific situation — each morning.
 
 ### 11. Long-Term Vision
 
@@ -272,7 +271,6 @@ Walris is designed to evolve beyond a daily briefing application.
 
 Future versions may include:
 
-- Personalized economic briefings
 - Interactive indicator dashboards
 - Country-specific economic overviews
 - AI-powered question answering

@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     environment: Literal["development", "production"] = "development"
     database_url: str
     fmp_api_key: str
+    marketaux_api_key: str
+    fred_api_key: str
 
 
 settings = Settings()

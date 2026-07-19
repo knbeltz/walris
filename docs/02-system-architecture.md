@@ -12,8 +12,10 @@
 
 ## 1. Architecture Overview
 
-Walris is a mobile-first economic intelligence application that generates a daily briefing of
-the top five economic events.
+Walris is a mobile-first economic intelligence application that generates a daily briefing
+personalized to each user's selected category (Investors, Small Business Owners/Entrepreneurs,
+Consumers, Home Owners/Home Buyers, Students, Job Seekers, or "I Want Everything") and optional
+additional topics. See `docs/09-personalization-pivot-plan.md` for the full plan.
 
 The system has four major layers:
 
@@ -70,90 +72,81 @@ OpenAI should never be treated as the source of truth.
 
 ## 4. V1 Authentication Architecture
 
-Walris V1 does **not** include user authentication.
-
-Users can open the app immediately after installation.
-
-The app may request notification permission and store an anonymous device token.
+Walris V1 **includes** user authentication via Clerk — a deliberate change from this project's
+original plan (which deferred auth to V2). Personalized, per-category briefings require knowing
+who the user is; a local/anonymous preference isn't sufficient once briefings are individually
+generated per account. See `docs/09-personalization-pivot-plan.md` §2 for the full reasoning.
 
 ```text
 User installs app
   ↓
-User opens app
+User signs up / signs in via Clerk
   ↓
-App loads today's briefing
+User selects one category (+ optional additional topics)
+  ↓
+Selections stored in Supabase, linked to the user's account
   ↓
 App asks for notification permission
   ↓
-Expo push token is stored anonymously
+Expo push token is stored, linked to the user's account
+  ↓
+App loads the user's personalized briefing
 ```
 
-Authentication is deferred to V2.
+Users can change their category/topic selections anytime from a settings screen.
 
 ## 5. Data Flow: Daily Briefing Generation
 
-A scheduled backend job runs every morning.
+A scheduled backend job runs every morning. Full detail in
+`docs/09-personalization-pivot-plan.md` §7-9.
 
 ```text
 Scheduled job starts
   ↓
-Fetch today's economic calendar from Finnhub
+Fetch all 16 FMP fields (index quotes, sector performance, company spotlights)
   ↓
-Normalize raw economic events
+Fetch latest values for all 39 FRED indicators
   ↓
-Filter for relevant macroeconomic events
+Search Marketaux for same-day news, once per data field (up to 55 calls)
   ↓
-Match events to FRED series where possible
+Drop any data field with zero recent news coverage from today's working dataset
   ↓
-Fetch historical context from FRED
+For each registered user:
+    filter the dataset to their category + additional topics
+    send to OpenAI, generate their individual briefing
+    store as a user_briefings row
   ↓
-Search Marketaux for related news coverage
-  ↓
-Send structured payload to OpenAI
-  ↓
-OpenAI returns enriched event summaries
-  ↓
-Store briefing and enriched events in Supabase
-  ↓
-Mobile app fetches completed briefing
+Schedule deletion of today's raw FRED/Marketaux/FMP data 48 hours from now
 ```
 
 ## 6. Data Flow: App Opening
 
 ```text
-User opens Walris
+User opens Walris (signed in via Clerk)
   ↓
-Mobile app calls GET /briefings/today
+Mobile app calls GET /v1/briefings/today (authenticated)
   ↓
-FastAPI checks Supabase for today's briefing
+FastAPI checks Supabase for today's user_briefings row for this user
   ↓
 If briefing exists:
     return briefing
-If briefing does not exist:
+If briefing does not exist yet:
     return empty/loading state
   ↓
-Mobile app renders daily briefing
+Mobile app renders the user's personalized briefing
 ```
 
 The app should not generate a briefing on demand for each user.
 
 Daily briefings are pre-generated and cached.
 
-## 7. Data Flow: Event Detail Page
+## 7. Data Flow: Event Detail Page (obsolete)
 
-```text
-User taps event card
-  ↓
-Mobile app calls GET /events/{event_id}
-  ↓
-FastAPI retrieves:
-    event data
-    enriched summary
-    FRED context
-    related news articles
-  ↓
-Mobile app renders detail screen
-```
+This flow assumed discrete, individually-addressable "events" (Finnhub calendar entries). The
+personalization pivot has no equivalent concept — a user's briefing is one personalized narrative
+per day, not a list of drill-down-able events. No replacement screen/endpoint is currently
+planned; revisit only if a future version reintroduces some form of individually-linkable content
+within a briefing.
 
 ## 8. Notification Architecture
 
@@ -164,22 +157,22 @@ User grants notification permission
   ↓
 Expo returns push token
   ↓
-Mobile app sends token to FastAPI
+Mobile app sends token to FastAPI, linked to the signed-in user
   ↓
-FastAPI stores token in Supabase
+FastAPI stores token in Supabase (device_tokens.user_id)
   ↓
-Morning briefing job completes
+Per-user briefing generation completes for this user
   ↓
-Notification job sends push notification
+Notification job sends this user's push notification
   ↓
 User taps notification
   ↓
-App opens today's briefing
+App opens the user's personalized briefing
 ```
 
-Default notification copy:
-
-> View this morning's top 5 economic events.
+Notification copy is no longer a single hardcoded string for everyone — it should reflect the
+user's category (e.g. referencing their specific briefing content), not a generic "top 5 events"
+line. Exact copy per category is a mobile/notification-milestone implementation detail.
 
 ## 9. Main Backend Services
 
@@ -238,10 +231,11 @@ Responsible for:
 
 Responsible for:
 
-- Orchestrating the full daily briefing pipeline
-- Selecting top 5 events
-- Storing final results
-- Serving completed briefings
+- Orchestrating the full daily pipeline (FMP + FRED fetch, Marketaux news, per-user OpenAI
+  generation)
+- Filtering the shared dataset per user by category + additional topics
+- Storing each user's generated briefing
+- Serving each user their own completed briefing
 
 ### Notification Service
 
@@ -326,98 +320,64 @@ news_articles
 
 ## 12. Suggested Database Tables
 
-### `briefings`
+Superseded by the personalization pivot — see `docs/09-personalization-pivot-plan.md` §8 for the
+authoritative, up-to-date schema design and reasoning. Summary:
 
-Stores daily briefing-level content.
+### `users` (new)
 
 ```text
 id
-briefing_date
-title
-summary
-status
+clerk_user_id
+email
+category
+additional_topics       (JSONB array)
 created_at
 updated_at
 ```
 
-### `economic_events`
+### `daily_data_items` (replaces `economic_events`/`fred_series`)
 
-Stores normalized economic event data from Finnhub.
+Temporary — deleted 48 hours after `fetched_at`, not a permanent historical archive.
 
 ```text
 id
-briefing_id
-external_event_id
-event_name
-country
-release_time
-actual_value
-forecast_value
-previous_value
-unit
-source
-created_at
-updated_at
+item_key                (stable slug: FRED series ID or FMP field name)
+source                  ("fred" or "fmp")
+date
+value                   (nullable, single-value FRED-style fields)
+raw_data                (JSONB, multi-field FMP-style records)
+fetched_at
 ```
 
-### `enriched_events`
+### `daily_data_news` (replaces `news_articles`)
 
-Stores AI-generated summaries and rankings.
-
-```text
-id
-event_id
-importance_score
-importance_reason
-plain_english_summary
-historical_context_summary
-news_context_summary
-affected_groups
-created_at
-updated_at
-```
-
-### `fred_series`
-
-Stores historical context for events.
+Temporary — same 48-hour deletion as `daily_data_items`.
 
 ```text
 id
-event_id
-series_id
-series_name
-latest_value
-previous_value
-ten_year_average
-historical_percentile
-trend_direction
-data_points
-created_at
-updated_at
-```
-
-### `news_articles`
-
-Stores Marketaux article metadata.
-
-```text
-id
-event_id
+item_key
+date
 headline
 source
 url
 published_at
 summary
 sentiment
-entities
-topics
-created_at
-updated_at
 ```
 
-### `device_tokens`
+### `user_briefings` (replaces the global `briefings`/`enriched_events` tables)
 
-Stores anonymous Expo push tokens.
+One row per user per day — the individually-generated OpenAI output.
+
+```text
+id
+user_id
+date
+content
+fetched_at
+```
+
+### `device_tokens` (modified — now linked to a user)
 
 ```text
 id
@@ -426,6 +386,7 @@ device_id
 platform
 timezone
 is_active
+user_id                 (nullable — preserves anonymous-device support)
 created_at
 updated_at
 ```
@@ -478,30 +439,36 @@ mobile/
 
 ## 14. Frontend Screens
 
+Updated for the personalization pivot — see `docs/09-personalization-pivot-plan.md` §3/§10 for
+full detail.
+
+### Sign-Up / Sign-In Screens (new)
+
+Clerk-based authentication.
+
+### Category Selection Screen (new)
+
+Single-select from the 7 categories, each explained before the user picks.
+
+### Additional Topics Screen (new)
+
+Optional multi-select from the 8 topic groups, layered on top of the chosen category.
+
 ### Home Screen
 
 Displays:
 
 - App name
 - Date
-- Daily briefing title
-- Daily summary
-- Top 5 event cards
+- The signed-in user's personalized daily briefing content
 
-### Event Detail Screen
+### Event Detail Screen — obsolete
 
-Displays:
+Removed under this pivot; no discrete events exist to drill into (see §7).
 
-- Event name
-- Country
-- Release time
-- Actual / forecast / previous
-- Importance score
-- Plain-English summary
-- Historical context
-- News context
-- Affected groups
-- Related articles
+### Settings Screen (new)
+
+Lets the user change their category and additional topics anytime.
 
 ### Empty State
 
@@ -619,19 +586,21 @@ Normalized market data (IndexQuote / SectorPerformance / CompanySpotlight)
 
 All external API responses should be normalized before being stored or sent to OpenAI.
 
-## 21. Caching Strategy
+## 21. Caching / Retention Strategy
 
-Supabase acts as the primary content cache.
+Supabase acts as the primary content cache, but retention is now temporary, not permanent — see
+`docs/09-personalization-pivot-plan.md` §2/§8.
 
 Walris should not call external APIs every time the app opens.
 
-Caching rules:
+Rules:
 
-- Daily briefing: generated once per day
-- Economic events: stored once per briefing
-- FRED historical data: refreshed daily for relevant events
-- Marketaux news: refreshed during briefing generation
-- OpenAI summaries: generated once per briefing
+- Raw FMP/FRED/Marketaux data: fetched once per day (shared across all users), deleted 48 hours
+  after fetch
+- Each user's briefing: generated once per day (per user, via OpenAI), deleted alongside the raw
+  data it was built from
+- No permanent historical archive is maintained in Walris's own database — FRED itself remains
+  the durable historical source if ever needed again later
 
 ## 22. Error Handling Strategy
 
@@ -715,8 +684,12 @@ V1 security requirements:
 - No secrets committed to GitHub
 - HTTPS required in production
 
-Since V1 has no authentication, no private user data should be stored except anonymous device
-notification tokens.
+V1 now includes authentication (Clerk), so this needs revisiting from the original no-auth
+assumption: user identity/session verification happens via Clerk-issued tokens (never re-implement
+password/session handling locally); the backend stores real private user data (email, category
+preference) which must be protected accordingly (never logged in plaintext, access scoped to the
+owning user's own records only); device tokens now link to a user account (nullable, preserving
+anonymous-device support) rather than being fully anonymous by design.
 
 ## 27. Performance Requirements
 
@@ -743,21 +716,11 @@ Backend should log:
 
 Use a `job_runs` table to track scheduled job health.
 
-## 29. Future V2 Architecture
+## 29. V1 Authenticated Architecture (pulled forward from the original V2 plan)
 
-When personalization is added, introduce authentication.
-
-Likely V2 additions:
-
-- Clerk authentication
-- user profiles
-- saved interests
-- bookmarked events
-- personalized notifications
-- custom watchlists
-- premium subscription layer
-
-Future authenticated architecture:
+This section originally described V2. Clerk authentication, user profiles, and personalized
+content are now V1 (see §4 and `docs/09-personalization-pivot-plan.md`), because per-category
+briefings require knowing who the user is.
 
 ```text
 React Native
@@ -768,6 +731,9 @@ FastAPI
   ↓
 Supabase with user-linked records
 ```
+
+Still genuinely deferred to V2 or later: bookmarked events (no discrete events exist anymore
+under this pivot — see §7), custom watchlists, and a premium subscription layer.
 
 ## 30. Summary
 
@@ -785,8 +751,11 @@ FMP + FRED + Marketaux + OpenAI
 Expo push notifications
 ```
 
-The central architectural decision is that Walris pre-generates a daily briefing instead of
-generating content live for each user.
+The central architectural decision is that Walris pre-generates each day's briefings ahead of
+time — individually, per registered user, in a scheduled batch job — rather than generating
+content live/on-demand when a user opens the app. Personalization does not mean per-request
+generation; it means the daily batch job now produces one output per user instead of one shared
+output for everyone.
 
 This keeps the app:
 
