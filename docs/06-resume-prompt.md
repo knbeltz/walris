@@ -113,8 +113,44 @@ planned in `docs/09-personalization-pivot-plan.md`.
   not plain `npm install`, to resolve the right version. Fixed; `expo-doctor` clean except one
   unrelated pre-existing `expo` patch-version lag, not touched.
 
-**Not started yet:** `<ClerkProvider>` in `mobile/app/_layout.tsx`, sign-up/sign-in screens
-(likely a new `app/(auth)/` route group — no route groups exist anywhere in this app yet).
+**Mobile progress update (2026-07-20):**
+- `<ClerkProvider>` is done, verified, and committed — wrapped as the outermost provider in
+  `mobile/app/_layout.tsx`, `publishableKey` read via a fail-fast local variable (not inline
+  `process.env` access — TypeScript can't narrow a raw property access, only a checked local
+  variable), `tokenCache` from `@clerk/expo/token-cache` wired in. Passes `tsc`/`eslint`/`prettier`.
+- `mobile/app/(auth)/sign-in.tsx` exists (route group, not `app/auth/` — route groups don't add a
+  URL segment). **Still in progress, not working yet**: phone-number send-code handler
+  (`handlePhoneSignIn`) is written but has a real bug (`getErrorMessage` called but never
+  defined/imported — needs either an inline `error instanceof Error ? error.message : '...'` or a
+  small shared helper in `lib/utils.ts`, since sign-up will likely need the same pattern). None of
+  the three buttons (phone/Google/Apple) have `onPress` wired yet. The verify-code step
+  (`phoneCode.verifyCode` + `finalize()`) isn't implemented yet either — only the initial
+  send-code step exists. Google/Apple hooks are imported but completely unused so far (deferred —
+  phone was the agreed starting point).
+
+**A genuinely important discovery, worth reading before touching any more Clerk code:** this
+project's exact installed `@clerk/expo` version (Core 3, `^3.7.8`) uses a fundamentally different
+API shape than what's described in Clerk's own docs/most tutorials indexed by search engines
+(which describe an older/legacy pattern). Confirmed by reading the actual shipped `.d.ts` files
+directly (`node_modules/@clerk/expo/node_modules/@clerk/shared/dist/types/state.d.ts` and
+`signInFuture.d.ts`), not from any web source:
+
+- `useSignIn()` returns `{ signIn, errors, fetchStatus }` — **not** `{ signIn, setActive,
+  isLoaded }` as most docs/tutorials describe. `setActive`/`isLoaded` don't exist in this version.
+- All the actual sign-in methods live *on* the `signIn` object itself (a rich `SignInFutureResource`,
+  not a plain trigger function): `signIn.password()`, `signIn.phoneCode.sendCode()`/`.verifyCode()`,
+  `signIn.emailCode.sendCode()`/`.verifyCode()`, `signIn.sso()` (unified OAuth/enterprise, takes a
+  `strategy` like `'oauth_google'`), `signIn.finalize()` (replaces `setActive()`), `signIn.mfa.*`,
+  `signIn.status` (readonly, tracks flow progress: `'needs_identifier'`, `'needs_first_factor'`,
+  `'complete'`, etc.) — every method returns `Promise<{ error: ClerkError | null }>`.
+- The dedicated per-provider hooks (`useSignInWithGoogle`, `useSignInWithApple`) exist too, but
+  their real returned property names are `startGoogleAuthenticationFlow`/
+  `startAppleAuthenticationFlow` (with the `Flow` suffix) — not the shorter names that seemed
+  intuitive and that most docs imply.
+- **When in doubt about this SDK's actual API surface, read the real `.d.ts` files in
+  `node_modules/@clerk/expo` directly rather than trusting search/docs** — this is genuinely
+  newer (Core 3, March 2026) than most indexed content, and got real method/property names wrong
+  twice this session before checking the source directly settled it.
 
 ### The Milestone 12 pivot story (historical — read if you need the full FMP background)
 
