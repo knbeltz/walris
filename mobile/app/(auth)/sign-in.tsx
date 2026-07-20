@@ -1,18 +1,14 @@
 import { useSignIn } from '@clerk/expo';
-import { useSignInWithGoogle } from '@clerk/expo/google';
-import { useSignInWithApple } from '@clerk/expo/apple';
 import { useState } from 'react';
 import { TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
+import { getErrorMessage } from '@/lib/utils';
 
 export default function SignInScreen() {
     const { signIn, errors, fetchStatus } = useSignIn();
-
-    const { startGoogleAuthenticationFlow } = useSignInWithGoogle();
-    const { startAppleAuthenticationFlow } = useSignInWithApple();
 
     const router = useRouter();
 
@@ -65,7 +61,7 @@ export default function SignInScreen() {
             setIsVerifying(true);
         } catch (error: unknown) {
             console.error('Phone sign-in error:', error);
-            setErrorMessage(error instanceof Error ? error.message : 'Something went wrong.');
+            setErrorMessage(getErrorMessage(error));
         }   finally {
             setIsSubmitting(false);
         }
@@ -108,48 +104,86 @@ export default function SignInScreen() {
                             'Clerk session task still required',
                             session.currentTask,
                         );
+                        return;
                     }
-                }
-            })
-        }
-    }
+
+                    router.replace('/');  
+                },
+            });
+        } catch (error: unknown) {
+            console.error('Phone verification error:', error);
+            setErrorMessage(getErrorMessage(error));
+        } finally {
+        setIsSubmitting(false);
+    };
+  
+    const clerkIsFetching = fetchStatus === 'fetching';
+    const authenticationIsLoading = isSubmitting || clerkIsFetching;
+    
+  };
 
 
+return (
+  <View style={{ flex: 1, padding: 24, justifyContent: 'center', gap: 16 }}>
+    <Text>Sign In</Text>
 
-    return(
-        <View>
-            <Text>Sign In</Text>
+    {!isVerifying ? (
+      <>
+        <TextInput
+          value={phoneNumber}
+          onChangeText={setPhoneNumber}
+          placeholder="+1 202 555 0123"
+          keyboardType="phone-pad"
+          autoComplete="tel"
+          editable={!authenticationIsLoading}
+        />
 
-            <TextInput   
-                value={phoneNumber}
-                onChangeText={setPhoneNumber}
-                placeholder="+1 202 555 0123"
-                keyboardType="phone-pad"
-            />
+        {errors.fields.identifier ? (
+          <Text>{errors.fields.identifier.message}</Text>
+        ) : null}
 
-            {isVerifying && (
-                <TextInput
-                    value={verificationCode}
-                    onChangeText={setVerificationCode}
-                    placeholder="Verification code"
-                    keyboardType="number-pad"
-                
-                />
-            )}
+        <Button
+          onPress={handlePhoneSignIn}
+          disabled={authenticationIsLoading}
+        >
+          <Text>
+            {authenticationIsLoading
+              ? 'Sending code...'
+              : 'Continue with phone'}
+          </Text>
+        </Button>
+      </>
+    ) : (
+      <>
+        <TextInput
+          value={verificationCode}
+          onChangeText={setVerificationCode}
+          placeholder="Verification code"
+          keyboardType="number-pad"
+          autoComplete="sms-otp"
+          editable={!authenticationIsLoading}
+        />
 
-            {errorMessage ? <Text>{errorMessage}</Text> : null}
+        {errors.fields.code ? (
+          <Text>{errors.fields.code.message}</Text>
+        ) : null}
 
-            <Button disabled={isSubmitting}>
-                <Text>Continue with phone</Text>
-            </Button>
+        <Button
+          onPress={handleVerifyingPhoneCode}
+          disabled={authenticationIsLoading}
+        >
+          <Text>
+            {authenticationIsLoading
+              ? 'Verifying...'
+              : 'Verify code'}
+          </Text>
+        </Button>
+      </>
+    )}
 
-            <Button disabled={isSubmitting}>
-                <Text>Continue with Google</Text>
-            </Button>
-
-            <Button disabled={isSubmitting}>
-                <Text>Continue with Apple</Text>
-            </Button>
-        </View>
-    );
+    {errorMessage ? (
+      <Text>{errorMessage}</Text>
+    ) : null}
+  </View>
+);
 }

@@ -119,14 +119,17 @@ planned in `docs/09-personalization-pivot-plan.md`.
   `process.env` access — TypeScript can't narrow a raw property access, only a checked local
   variable), `tokenCache` from `@clerk/expo/token-cache` wired in. Passes `tsc`/`eslint`/`prettier`.
 - `mobile/app/(auth)/sign-in.tsx` exists (route group, not `app/auth/` — route groups don't add a
-  URL segment). **Still in progress, not working yet**: phone-number send-code handler
-  (`handlePhoneSignIn`) is written but has a real bug (`getErrorMessage` called but never
-  defined/imported — needs either an inline `error instanceof Error ? error.message : '...'` or a
-  small shared helper in `lib/utils.ts`, since sign-up will likely need the same pattern). None of
-  the three buttons (phone/Google/Apple) have `onPress` wired yet. The verify-code step
-  (`phoneCode.verifyCode` + `finalize()`) isn't implemented yet either — only the initial
-  send-code step exists. Google/Apple hooks are imported but completely unused so far (deferred —
-  phone was the agreed starting point).
+  URL segment). **Phone-only now** (Google/Apple were built partway then deliberately dropped —
+  see the decision note below). Both `handlePhoneSignIn` (send code) and `handleVerifyingPhoneCode`
+  (verify code + `finalize()`) are written, buttons are wired to `onPress`, `getErrorMessage`
+  (`mobile/lib/utils.ts`, added alongside `cn()`) is used for safely extracting a message from a
+  caught `unknown` error. **One known bug, not yet fixed**: `handleVerifyingPhoneCode`'s closing
+  brace for its `finally` block and the closing brace for the function itself got collapsed into
+  one — so `clerkIsFetching`/`authenticationIsLoading` (declared right after) end up scoped
+  *inside* `handleVerifyingPhoneCode` instead of at the component's top level, making them
+  inaccessible from the `return (...)` JSX below ("cannot find name"). Fix: add the missing closing
+  brace right after the `finally` block, matching `handlePhoneSignIn`'s correct pattern just above
+  it in the same file.
 
 **A genuinely important discovery, worth reading before touching any more Clerk code:** this
 project's exact installed `@clerk/expo` version (Core 3, `^3.7.8`) uses a fundamentally different
@@ -151,6 +154,15 @@ directly (`node_modules/@clerk/expo/node_modules/@clerk/shared/dist/types/state.
   `node_modules/@clerk/expo` directly rather than trusting search/docs** — this is genuinely
   newer (Core 3, March 2026) than most indexed content, and got real method/property names wrong
   twice this session before checking the source directly settled it.
+- **Decision reversed: Google and Apple sign-in are dropped, phone number is now the only sign-in
+  method.** Reasoning chain worth knowing: while wiring up `useSignInWithGoogle`, its own `.d.ts`
+  doc comment revealed it's a *stub* requiring a separate uninstalled package
+  (`@clerk/expo-google-signin`) for real native sign-in, and recommends `useSSO()` instead — which
+  is browser-based (via `expo-web-browser`), a better fit for this project's Expo-Go-only workflow
+  (no dev client set up) than native Google/Apple SDKs would be. Rather than switch to `useSSO()`,
+  the user decided to just drop Google/Apple entirely and keep phone-only, favoring the design
+  system's own "Simplicity Wins" principle. `sign-in.tsx` still has the Google/Apple imports,
+  hooks, and handler as of this note — needs cleanup (see below) to remove them.
 
 ### The Milestone 12 pivot story (historical — read if you need the full FMP background)
 
