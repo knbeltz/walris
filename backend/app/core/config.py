@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     fmp_api_key: str
     marketaux_api_key: str
     fred_api_key: str
+    clerk_publishable_key: str
+    clerk_secret_key: str
+    clerk_jwks_url: str
 
 
 settings = Settings()

@@ -33,6 +33,13 @@ strict = true
 plugins = ["pydantic.mypy"]
 files = ["app"]
 
+[[tool.mypy.overrides]]
+# fastapi-clerk-auth ships no type stubs / py.typed marker. This only
+# silences the "missing stubs" complaint for this one untyped package —
+# everything else in the codebase still gets full strict checking.
+module = "fastapi_clerk_auth.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

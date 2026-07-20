@@ -1,9 +1,9 @@
 # Walris Resume Prompt
 
 **Document:** docs/06-resume-prompt.md
-**Last Updated:** 2026-07-19 (Milestone 13+ re-scoped into a full personalization pivot — see
-`docs/09-personalization-pivot-plan.md`; Milestone 12 formal sign-off still pending; no
-implementation of the pivot has started yet)
+**Last Updated:** 2026-07-20 (Milestone 13 backend done and verified — User model, migrations,
+Clerk token verification dependency; mobile Clerk setup not started yet. Milestone 12 formal
+sign-off still pending.)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -69,9 +69,54 @@ is Milestone 13 (User Accounts & Clerk Integration) per that plan.
 
 ## Current Milestone
 
-**Milestone 12 — FMP Market Data Service** (in progress, mid-pivot, pseudocode not yet written)
+**Milestone 13 — User Accounts & Clerk Integration** (in progress — backend done and verified,
+mobile not started yet). Milestone 12 is complete (see below); the personalization pivot is fully
+planned in `docs/09-personalization-pivot-plan.md`.
 
-### The pivot story (read this first if resuming cold)
+### Milestone 13 progress so far (2026-07-20)
+
+**Clerk project set up, all config wired and verified:**
+- `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWKS_URL` all in `backend/.env` +
+  `.env.example` (the "read by Settings today" section) and `Settings` — confirmed loading
+  correctly. `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` in `mobile/.env.local` + `.env.local.example`.
+- Custom session token claims added in the Clerk Dashboard (Sessions → Customize session token):
+  `phone_number` (`{{user.primary_phone_number}}`), `email` (`{{user.primary_email_address}}` —
+  redundant since Clerk's JWT v2 already includes `email` by default, but harmless), `full_name`
+  (`{{user.full_name}}`). Verified shortcode names against Clerk's own docs before using them.
+
+**Backend, done and verified:**
+- `backend/app/models/user.py` — `User` model: `id` (UUID PK), `clerk_user_id` (unique + indexed
+  str), `email`/`phone_number`/`name` (all nullable — a user can sign up phone-only with no email,
+  or vice versa). Registered in `app/models/__init__.py`. Passes `ruff`/`mypy --strict` clean.
+- Two Alembic migrations generated, reviewed, and applied against live Supabase (after resuming
+  the project from an auto-pause — a free-tier Supabase project pauses after inactivity, has an
+  in-dashboard Resume button, takes a few minutes to come back): `58f1707ee1f7` (create `users`
+  table) and `a4154f5fc063` (add `name` column, added after the fact). Both verified via direct
+  `inspect(engine)` column checks, not just "the command didn't error."
+- `backend/app/core/auth.py` — `get_current_user` dependency, using `fastapi-clerk-auth`'s
+  `ClerkHTTPBearer` to verify the token, then look-up-or-create the local `User` row by
+  `clerk_user_id`. Two real bugs caught in review and fixed: `return user` was originally nested
+  inside the `if user is None:` block, meaning every *returning* user (not first-time sign-ups)
+  got `None` back from the dependency — would have broken auth entirely for anyone after their
+  first request. Also a missing type annotation on the `credentials` parameter (`mypy --strict`
+  requirement) — resolved with an explicit `credentials: Any`, since `fastapi-clerk-auth` ships no
+  type stubs at all (a `[[tool.mypy.overrides]]` entry for `fastapi_clerk_auth.*` was added to
+  `pyproject.toml` to silence the resulting "missing stubs" noise without weakening strict mode
+  for the rest of the codebase). Passes `ruff`/`mypy --strict` clean now.
+- `fastapi-clerk-auth` added to `requirements.txt` and installed.
+
+**Mobile, packages installed but no screens/provider wired up yet:**
+- `@clerk/expo` (correct current package name — renamed from `@clerk/clerk-expo`, v3.x current as
+  of March 2026) and `expo-secure-store` installed. One real mistake caught by `expo-doctor`:
+  `expo-secure-store` was first installed via plain `npm install`, landing on `57.0.1` instead of
+  the SDK-54-compatible `~15.0.8` — Expo-managed native modules need `npx expo install <name>`,
+  not plain `npm install`, to resolve the right version. Fixed; `expo-doctor` clean except one
+  unrelated pre-existing `expo` patch-version lag, not touched.
+
+**Not started yet:** `<ClerkProvider>` in `mobile/app/_layout.tsx`, sign-up/sign-in screens
+(likely a new `app/(auth)/` route group — no route groups exist anywhere in this app yet).
+
+### The Milestone 12 pivot story (historical — read if you need the full FMP background)
 
 Milestone 12 started, per the roadmap, as "Finnhub Service" — fetch today's economic calendar
 events from Finnhub. Config/tooling was wired up (`FINNHUB_API_KEY` in `Settings`, `httpx` added
@@ -1132,15 +1177,16 @@ EXPO_PUBLIC_API_BASE_URL
 
 ## Next Steps
 
-1. **PRIORITY when resuming: start implementing Milestone 13 (User Accounts & Clerk Integration)
-   per `docs/09-personalization-pivot-plan.md`.** The re-scoping work is done — `docs/09` has the
-   full plan (verified FRED series IDs, database schema, service architecture, mobile changes,
-   milestone breakdown), and `docs/01`/`docs/02`/`docs/03` have all been updated to reflect it.
-   Full mentor workflow (Phase 1-7) applies to M13 same as every prior milestone. Note:
-   `docs/03-development-roadmap.md`'s Milestones 27+ (mobile UI, notifications) have an explicit
-   flag noting they still assume no-auth/single-global-briefing and need their own re-scoping pass
-   before being started as-is — not urgent until Milestone 22ish is reached, but don't skip it
-   when the time comes.
+1. **PRIORITY when resuming: finish Milestone 13's mobile side.** The backend half is done and
+   verified (see the Milestone 13 progress notes above) — `User` model, migrations,
+   `get_current_user`. What's left: `<ClerkProvider>` in `mobile/app/_layout.tsx` (using the
+   `tokenCache` from `@clerk/expo/token-cache`, already installed), then sign-up/sign-in screens
+   (likely a new `app/(auth)/` route group — no route groups exist yet in this app). Once that's
+   done, Milestone 13 is complete and Milestone 14 (Category & Topic Selection, per `docs/09`) is
+   next. Note: `docs/03-development-roadmap.md`'s Milestones 27+ (mobile UI, notifications) have
+   an explicit flag noting they still assume no-auth/single-global-briefing and need their own
+   re-scoping pass before being started as-is — not urgent until Milestone 22ish is reached, but
+   don't skip it when the time comes.
 2. **Formally sign off Milestone 12** — add it to the "Completed Milestones" checklist above and
    write its own "(complete)" section in the style of Milestones 3-11 below, summarizing the
    pivot/decisions/bugs-caught the same way those do. Reasonable to do alongside #1 or separately.

@@ -5,6 +5,7 @@ from app.models.enriched_event import EnrichedEvent
 from app.models.fred_series import FredSeries
 from app.models.job_run import JobRun
 from app.models.news_article import NewsArticle
+from app.models.user import User
 
 __all__ = [
     "Briefing",
@@ -14,4 +15,5 @@ __all__ = [
     "FredSeries",
     "JobRun",
     "NewsArticle",
+    "User"
 ]

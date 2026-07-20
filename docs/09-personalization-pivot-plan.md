@@ -300,18 +300,28 @@ sync `httpx`, module `logger`, log-then-bare-`raise` on failure, no custom excep
 - `services/briefing_service.py` (orchestrator) — the daily job: FMP fetch → Marketaux fetch →
   filter → loop over all registered users calling `openai_service` per user → cleanup job scheduled
   for 48 hours later.
-- Auth dependency (e.g. `get_current_user`, modeled on the existing `get_db` dependency) —
-  verifies a Clerk-issued token, resolves it to a `users` row.
+- Auth dependency (`get_current_user`, modeled on the existing `get_db` dependency) — verified
+  approach: the `fastapi-clerk-auth` package (PyPI, actively maintained, v0.0.9 as of Nov 2025)
+  provides `ClerkHTTPBearer`, a FastAPI-native dependency that validates the JWT against Clerk's
+  JWKS endpoint and returns `HTTPAuthorizationCredentials` with a `.decoded` dict (the JWT claims,
+  including `sub` = the Clerk user ID). `get_current_user` wraps this: extract `sub`, look up a
+  `users` row by `clerk_user_id`, create one if it doesn't exist yet (first sign-in), return it.
+  The JWKS URL comes from the Clerk dashboard (Configure → API Keys → "Frontend API URL" +
+  `/.well-known/jwks.json`) — needs its own `Settings` field, not derived programmatically from
+  the publishable key (simpler and more transparent than decoding it).
 
-**New `Settings` fields needed**: `clerk_secret_key`, `clerk_publishable_key`, `openai_api_key`
-(already reserved in `.env.example`, not yet wired).
+**New `Settings` fields needed**: `clerk_secret_key`, `clerk_publishable_key` (both already wired
+as of this session), `clerk_jwks_url` (still needed), `openai_api_key` (already reserved in
+`.env.example`, not yet wired).
 
 ## 10. Mobile app changes
 
 Current state: bare Expo Router `<Stack />`, one route (`index.tsx`), no auth libraries, no route
 groups, only `button`/`card`/`badge`/`separator`/`text` UI primitives exist.
 
-- Add `@clerk/clerk-expo` (or current equivalent), `expo-secure-store` (session persistence).
+- Add `@clerk/expo` (renamed from `@clerk/clerk-expo`; v3.x is current as of March 2026) —
+  ships its own `tokenCache` (from `@clerk/expo/token-cache`) that wraps `expo-secure-store`
+  automatically, so `expo-secure-store` is a peer dependency but needs no custom integration code.
 - New route structure: `app/(auth)/sign-up.tsx` + `sign-in.tsx`, an
   `app/(onboarding)/category.tsx` (single-select category screen, one explanation per category
   before picking), `app/(onboarding)/topics.tsx` (optional multi-select topic screen), a Settings
@@ -329,7 +339,6 @@ groups, only `button`/`card`/`badge`/`separator`/`text` UI primitives exist.
   implementation time, not from this planning doc.
 - Whether ISM PMI / GDPNow / NFIB / DXY are worth pursuing via an alternate paid/licensed source,
   or simply left out.
-- Exact Clerk backend verification approach (JWKS caching, session vs. JWT template).
 - Exact cleanup mechanism for the 48-hour data expiry (scheduled job vs. Postgres-native TTL) —
   an implementation-time decision.
 - Per-user OpenAI generation cost should be sanity-checked against expected user counts once real
