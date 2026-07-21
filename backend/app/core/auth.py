@@ -36,7 +36,6 @@ def get_current_user(
 
     name = decoded_token.get("full_name")
     phone_number = decoded_token.get("phone_number")
-    email = decoded_token.get("email")
 
     if not isinstance(name, str) or not name.strip():
         name = None
@@ -46,15 +45,10 @@ def get_current_user(
     else:
         phone_number = phone_number.strip()
 
-    if not isinstance(email, str) or not email.strip():
-        email = None
-    else:
-        email = email.strip()
-
     user = db.query(User).filter(User.clerk_user_id == clerk_user_id).first()
 
     if user is None:
-        user = User(clerk_user_id=clerk_user_id, name=name, email=email, phone_number=phone_number)
+        user = User(clerk_user_id=clerk_user_id, name=name, phone_number=phone_number)
 
         db.add(user)
         db.commit()

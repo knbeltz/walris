@@ -1,4 +1,4 @@
-import { useSignIn } from '@clerk/expo';
+import { useSignUp } from '@clerk/expo';
 import { useState } from 'react';
 import { TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { getErrorMessage } from '@/lib/utils';
 
-export default function SignInScreen() {
-  const { signIn, errors, fetchStatus } = useSignIn();
+export default function SignUpScreen() {
+  const { signUp, errors, fetchStatus } = useSignUp();
 
   const router = useRouter();
 
@@ -17,11 +17,11 @@ export default function SignInScreen() {
   const [verificationCode, setVerificationCode] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
 
-  // General UI state
+  // General ui state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const handlePhoneSignIn = async () => {
+  const handlePhoneSignUp = async () => {
     const normalizedPhoneNumber = phoneNumber.trim();
 
     if (!normalizedPhoneNumber) {
@@ -33,18 +33,16 @@ export default function SignInScreen() {
     setErrorMessage('');
 
     try {
-      const { error } = await signIn.create({
-        identifier: normalizedPhoneNumber,
+      const { error } = await signUp.create({
+        phoneNumber: normalizedPhoneNumber,
       });
 
       if (error) {
-        setErrorMessage(error.message ?? 'Unable to begin phone sign-in');
+        setErrorMessage(error.message ?? 'Unable to begin phone sign-up');
         return;
       }
 
-      const result = await signIn.phoneCode.sendCode({
-        phoneNumber: normalizedPhoneNumber,
-      });
+      const result = await signUp.verifications.sendPhoneCode();
 
       if (result.error) {
         setErrorMessage(
@@ -55,7 +53,7 @@ export default function SignInScreen() {
 
       setIsVerifying(true);
     } catch (error: unknown) {
-      console.error('Phone sign-in error:', error);
+      console.error('Phone sign-up error:', error);
       setErrorMessage(getErrorMessage(error));
     } finally {
       setIsSubmitting(false);
@@ -74,7 +72,7 @@ export default function SignInScreen() {
     setErrorMessage('');
 
     try {
-      const { error } = await signIn.phoneCode.verifyCode({
+      const { error } = await signUp.verifications.verifyPhoneCode({
         code: normalizedCode,
       });
 
@@ -83,12 +81,12 @@ export default function SignInScreen() {
         return;
       }
 
-      if (signIn.status !== 'complete') {
-        setErrorMessage('Sign-in requires another authentication step.');
+      if (signUp.status !== 'complete') {
+        setErrorMessage('Sign-up requires another authentication step.');
         return;
       }
 
-      await signIn.finalize({
+      await signUp.finalize({
         navigate: ({ session }) => {
           if (session?.currentTask) {
             console.log(
@@ -121,7 +119,7 @@ export default function SignInScreen() {
         gap: 16,
       }}
     >
-      <Text>Sign In</Text>
+      <Text>Sign Up</Text>
 
       {!isVerifying ? (
         <>
@@ -134,12 +132,12 @@ export default function SignInScreen() {
             editable={!authenticationIsLoading}
           />
 
-          {errors.fields.identifier ? (
-            <Text>{errors.fields.identifier.message}</Text>
+          {errors.fields.phoneNumber ? (
+            <Text>{errors.fields.phoneNumber.message}</Text>
           ) : null}
 
           <Button
-            onPress={handlePhoneSignIn}
+            onPress={handlePhoneSignUp}
             disabled={authenticationIsLoading}
           >
             <Text>

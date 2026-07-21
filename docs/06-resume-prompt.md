@@ -161,8 +161,36 @@ directly (`node_modules/@clerk/expo/node_modules/@clerk/shared/dist/types/state.
   is browser-based (via `expo-web-browser`), a better fit for this project's Expo-Go-only workflow
   (no dev client set up) than native Google/Apple SDKs would be. Rather than switch to `useSSO()`,
   the user decided to just drop Google/Apple entirely and keep phone-only, favoring the design
-  system's own "Simplicity Wins" principle. `sign-in.tsx` still has the Google/Apple imports,
-  hooks, and handler as of this note — needs cleanup (see below) to remove them.
+  system's own "Simplicity Wins" principle. Google/Apple imports/hooks/handler/buttons have since
+  been fully removed from `sign-in.tsx` — phone is the only method now.
+
+### Milestone 13 progress update (2026-07-21)
+
+- **`sign-in.tsx` and `sign-up.tsx` are both done, correct, and verified** (`tsc`/`eslint`/
+  `prettier` all clean) — phone-only, full send-code → verify-code → `finalize()` flow on both.
+  Real bugs caught and fixed along the way: a brace-matching bug in `handleVerifyingPhoneCode`
+  that trapped `authenticationIsLoading` inside the function instead of the component's top level
+  (fixed); a mislabeled button on `sign-up.tsx` showing "Verify code" on the phone-number step
+  instead of "Continue with phone" (fixed). Confirmed from the real `SignUpFutureResource`/
+  `SignInFutureResource` types (not assumed): sign-up's phone methods live under
+  `signUp.verifications.sendPhoneCode()`/`verifyPhoneCode()`, a different nesting than sign-in's
+  `signIn.phoneCode.sendCode()`/`verifyCode()`; sign-up's `create()` takes `phoneNumber` where
+  sign-in's takes a generic `identifier`; and `errors.fields.identifier` (sign-in) becomes
+  `errors.fields.phoneNumber` (sign-up) — `SignUpFields` has no `identifier` key at all.
+- **`email` removed entirely from `User`** (model + `get_current_user`) — no longer needed now
+  that Google/Apple (the main source of an email claim) are gone, phone-only doesn't need it.
+  Migration `859c74aa86e1_drop_email_from_users.py` generated, reviewed, and applied against
+  Supabase — model and live database confirmed back in sync (`id`, `clerk_user_id`, `phone_number`,
+  `name`, `created_at`, `updated_at`).
+- **First real end-to-end device test attempted, and a real gap found**: started the backend
+  (`--host 0.0.0.0`, LAN IP in `mobile/.env.local` needed updating — it had gone stale since a
+  previous session, same known gotcha as before) and the Expo dev server, opened the app in Expo
+  Go — but `app/index.tsx` is still the old Milestone 10 health-check screen, and **nothing in the
+  app navigates to `/sign-in` or `/sign-up` yet**. The routes exist (Expo Router route groups don't
+  add a URL segment) but nothing links to them. Planned fix, not yet done: add a temporary
+  `<Link href="/sign-in">` on the home screen to actually test the flow, then build real
+  auth-gating (redirect unauthenticated users automatically) as its own deliberate step afterward
+  — don't conflate the temporary test link with the real solution.
 
 ### The Milestone 12 pivot story (historical — read if you need the full FMP background)
 
