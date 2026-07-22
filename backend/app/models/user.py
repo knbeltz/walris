@@ -10,5 +10,5 @@ class User(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     clerk_user_id: Mapped[str] = mapped_column(unique=True, index=True)
-    phone_number: Mapped[str | None]
+    email: Mapped[str | None]
     name: Mapped[str | None]

@@ -1,7 +1,8 @@
-import { useSignIn } from '@clerk/expo';
+import { useSignIn, useSSO  } from '@clerk/expo';
 import { useState } from 'react';
 import { TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as AuthSession from 'expo-auth-session';
 
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
@@ -10,22 +11,33 @@ import { getErrorMessage } from '@/lib/utils';
 export default function SignInScreen() {
   const { signIn, errors, fetchStatus } = useSignIn();
 
+  const { startSSOFlow } = useSSO();
+
   const router = useRouter();
 
-  // Phone authentication state
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
-  const [isVerifying, setIsVerifying] = useState(false);
+  const redirectUrl = AuthSession.makeRedirectUri({
+    path: 'sso-callback',
+  });
+
+  // Email authentication state
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
 
   // General UI state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const handlePhoneSignIn = async () => {
-    const normalizedPhoneNumber = phoneNumber.trim();
+  const handleEmailPasswordSignIn = async () => {
+    // ...validation on email/password...
+    const normalizedEmail = email.trim();
 
-    if (!normalizedPhoneNumber) {
-      setErrorMessage('Please enter your phone number.');
+    if (!normalizedEmail) {
+      setErrorMessage('Please enter your email address.');
+      return;
+    }
+    
+    if (!password) {
+      setErrorMessage('Please enter your password.');
       return;
     }
 
@@ -33,53 +45,12 @@ export default function SignInScreen() {
     setErrorMessage('');
 
     try {
-      const { error } = await signIn.create({
-        identifier: normalizedPhoneNumber,
+      const { error } = await signIn.password({
+        emailAddress: normalizedEmail, password
       });
 
       if (error) {
-        setErrorMessage(error.message ?? 'Unable to begin phone sign-in');
-        return;
-      }
-
-      const result = await signIn.phoneCode.sendCode({
-        phoneNumber: normalizedPhoneNumber,
-      });
-
-      if (result.error) {
-        setErrorMessage(
-          result.error.message ?? 'Unable to send verification code.',
-        );
-        return;
-      }
-
-      setIsVerifying(true);
-    } catch (error: unknown) {
-      console.error('Phone sign-in error:', error);
-      setErrorMessage(getErrorMessage(error));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleVerifyingPhoneCode = async () => {
-    const normalizedCode = verificationCode.trim();
-
-    if (!normalizedCode) {
-      setErrorMessage('Please enter the verification code.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    setErrorMessage('');
-
-    try {
-      const { error } = await signIn.phoneCode.verifyCode({
-        code: normalizedCode,
-      });
-
-      if (error) {
-        setErrorMessage(error.message ?? 'The verification code is invalid.');
+        setErrorMessage(error.message ?? 'Unable to sign-in.');
         return;
       }
 
@@ -102,7 +73,79 @@ export default function SignInScreen() {
         },
       });
     } catch (error: unknown) {
-      console.error('Phone verification error:', error);
+      console.error('Email/password sign-in error:', error);
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsSubmitting(true);
+    setErrorMessage('');
+
+    try {
+      const { createdSessionId, setActive } = await startSSOFlow({
+        strategy: 'oauth_google',
+        redirectUrl,
+      });
+
+      if (!createdSessionId) {
+        setErrorMessage(
+          'Google authentication requires an additional step.',
+        );
+        return;
+      }
+
+      if (!setActive) {
+        setErrorMessage('Unable to activate the Google session.');
+        return;
+      }
+
+      await setActive({
+        session: createdSessionId,
+        navigate: async ({ session }) => {
+          if (session?.currentTask) {
+            console.log(
+              'Clerk session task still required:',
+              session.currentTask,
+            );
+            return;
+          }
+
+          router.replace('/');
+        },
+      });
+    } catch (error: unknown) {
+      console.error('Google SSO error:', error);
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    setIsSubmitting(true);
+    setErrorMessage('');
+
+    try {
+      const { createdSessionId, setActive } = await startSSOFlow({
+        strategy: 'oauth_apple',
+        redirectUrl,
+      });
+
+      if (!createdSessionId || !setActive) {
+        setErrorMessage('Apple sign-in could not be completed.');
+        return;
+      }
+
+      await setActive({
+        session: createdSessionId,
+      });
+
+      router.replace('/');
+    } catch (error: unknown) {
+      console.error('Apple SSO error:', error);
       setErrorMessage(getErrorMessage(error));
     } finally {
       setIsSubmitting(false);
@@ -113,67 +156,46 @@ export default function SignInScreen() {
   const authenticationIsLoading = isSubmitting || clerkIsFetching;
 
   return (
-    <View
-      style={{
-        flex: 1,
-        padding: 24,
-        justifyContent: 'center',
-        gap: 16,
-      }}
-    >
+    <View style={{ flex: 1, padding: 24, justifyContent: 'center', gap: 16 }}>
       <Text>Sign In</Text>
 
-      {!isVerifying ? (
-        <>
-          <TextInput
-            value={phoneNumber}
-            onChangeText={setPhoneNumber}
-            placeholder="+1 202 555 0123"
-            keyboardType="phone-pad"
-            autoComplete="tel"
-            editable={!authenticationIsLoading}
-          />
+      <TextInput
+        value={email}
+        onChangeText={setEmail}
+        placeholder="you@example.com"
+        keyboardType="email-address"
+        autoComplete="email"
+        autoCapitalize="none"
+        editable={!authenticationIsLoading}
+      />
+      {errors.fields.identifier ? (
+        <Text>{errors.fields.identifier.message}</Text>
+      ) : null}
 
-          {errors.fields.identifier ? (
-            <Text>{errors.fields.identifier.message}</Text>
-          ) : null}
+      <TextInput
+        value={password}
+        onChangeText={setPassword}
+        placeholder="Password"
+        secureTextEntry
+        autoComplete="password"
+        autoCapitalize="none"
+        editable={!authenticationIsLoading}
+      />
+      {errors.fields.password ? (
+        <Text>{errors.fields.password.message}</Text>
+      ) : null}
 
-          <Button
-            onPress={handlePhoneSignIn}
-            disabled={authenticationIsLoading}
-          >
-            <Text>
-              {authenticationIsLoading
-                ? 'Sending code...'
-                : 'Continue with phone'}
-            </Text>
-          </Button>
-        </>
-      ) : (
-        <>
-          <TextInput
-            value={verificationCode}
-            onChangeText={setVerificationCode}
-            placeholder="Verification code"
-            keyboardType="number-pad"
-            autoComplete="sms-otp"
-            editable={!authenticationIsLoading}
-          />
+      <Button onPress={handleEmailPasswordSignIn} disabled={authenticationIsLoading}>
+        <Text>{authenticationIsLoading ? 'Signing in...' : 'Sign in'}</Text>
+      </Button>
 
-          {errors.fields.code ? (
-            <Text>{errors.fields.code.message}</Text>
-          ) : null}
+      <Button onPress={handleGoogleSignIn} disabled={authenticationIsLoading}>
+        <Text>Continue with Google</Text>
+      </Button>
 
-          <Button
-            onPress={handleVerifyingPhoneCode}
-            disabled={authenticationIsLoading}
-          >
-            <Text>
-              {authenticationIsLoading ? 'Verifying...' : 'Verify code'}
-            </Text>
-          </Button>
-        </>
-      )}
+      <Button onPress={handleAppleSignIn} disabled={authenticationIsLoading}>
+        <Text>Continue with Apple</Text>
+      </Button>
 
       {errorMessage ? <Text>{errorMessage}</Text> : null}
     </View>
