@@ -757,11 +757,8 @@ Walris will have:
 At this point, Walris has its core personalized intelligence engine.
 
 The next phase should focus on building the mobile app experience that consumes this backend —
-Part 3 (Milestones 24-34) has now been re-scoped against this pivot; see that section below.
-**Part 4 (currently Milestones 41-56) has not been re-scoped yet** — it still assumes no
-authentication, one shared global briefing, and the old Part 3 milestone numbers/endpoints (e.g.
-`/briefings/today`, event cards). Don't treat that section as current without its own re-scoping
-pass, same caveat as before, just narrowed now that Part 3 is resolved.
+Part 3 (Milestones 24-34) and Part 4 (Milestones 35-50) have both now been re-scoped against this
+pivot; see those sections below. No outstanding stale-milestone caveats remain in this document.
 
 ---
 
@@ -794,11 +791,9 @@ By the end of this phase, the React Native app should be able to:
 - Validate backend API responses with Zod
 - Feel polished enough for early beta testing
 
-**Note:** Part 4 (currently Milestones 41-56: notifications, QA, deployment, launch) still assumes
-the old event model and the old Part 3 milestone numbers in places (e.g. references to
-`/briefings/today`, event cards). It needs its own renumbering/re-scoping pass before being started
-as-is — not addressed in this pass, same caveat this document already carried forward from the
-Part 2 rewrite.
+Part 4 (Milestones 35-50: notifications, QA, deployment, launch) has also been re-scoped against
+this pivot — see that section below. No outstanding stale-milestone caveats remain in this
+document.
 
 ---
 
@@ -898,817 +893,163 @@ The next phase should focus on:
 
 **Document:** docs/03-development-roadmap.md
 **Version:** 1.0
-**Phase:** Part 4 – Notifications, QA, Deployment & Launch
+**Phase:** Part 4 – Notifications, QA, Deployment & Launch (Personalization Pivot)
 
 ---
 
 ## Part 4 Overview
 
-Part 4 turns Walris from a working prototype into a launch-ready mobile application.
+**Replaces the original Milestones 41-56.** Renumbered from 35 to close the gap left by Part 3
+shrinking from 14 milestones (27-40) to 11 (24-34). The content itself mostly carries over
+unchanged — notification setup, QA, deployment, App Store prep are all still real, necessary work
+— but every reference to the old event model has been corrected: **no more anonymous device
+tokens** (V1 requires sign-in before the app is usable at all, per `docs/02-system-architecture.md`
+§4, so there's no anonymous state left to support), no more event cards/event detail in QA
+scenarios or performance targets, and Supabase/API references updated to the schema actually built
+in Part 2 (`users`, `daily_data_items`, `daily_data_news`, `user_briefings`, `device_tokens`,
+`job_runs`).
 
 By the end of this phase, Walris should have:
 
-- Morning push notifications
-- Anonymous device token storage
+- Morning push notifications, tied to signed-in users (not anonymous devices)
 - Production backend deployment
 - Production database configuration
-- App Store / Google Play readiness
-- QA testing
+- App Store / Google Play readiness, including production Google/Apple OAuth credentials
+- QA testing against the actual current endpoint/screen set
 - Error monitoring
 - Performance checks
 - Release checklist
 
 ---
 
-## Milestone 41 — Expo Notifications Setup
+## Milestone 35 — Expo Notifications Setup
 
-### Objective
+Unchanged from the original scope (`expo-notifications`/`expo-device`, permission request, Expo
+push token retrieval, physical-device handling) — this is client-side capability work that never
+depended on the event-vs-personalization model.
 
-Configure push notifications in the React Native app.
+## Milestone 36 — Device Token Registration API
 
-### Deliverables
+Replaces "Notification Token API." Since V1 requires authentication before the app is usable at
+all, there's no anonymous-token flow to build anymore — `POST /v1/notifications/register` is an
+authenticated endpoint (same `get_current_user` pattern as the preferences endpoint), storing the
+token against `device_tokens.user_id` directly at registration time rather than registering
+anonymously and linking later.
 
-Install and configure: `expo-notifications`, `expo-device`
+## Milestone 37 — Notification Registration Flow
 
-Implement:
+Unchanged in concept: request permission at an appropriate moment (now naturally after onboarding,
+since the user is already signed in by then), get the Expo push token, `POST` it to the backend,
+store registration status locally to avoid re-prompting.
 
-```text
-mobile/lib/notifications.ts
-mobile/hooks/usePushNotifications.ts
-```
+## Milestone 38 — Personalized Notification Sender
 
-Capabilities:
+Replaces "Morning Notification Sender." The old hardcoded copy ("View this morning's top 5
+economic events.") doesn't fit — every user's briefing content differs now, so the notification
+service sends to each user with a completed `user_briefings` row for that day, with generic
+copy that doesn't presume specific content (e.g. "Your personalized economic briefing is ready").
+Still: fetch active tokens, send via Expo, handle/deactivate invalid tokens, log results.
 
-- Request notification permission
-- Get Expo push token
-- Detect platform
-- Handle permission denied state
-- Handle physical device requirement
+## Milestone 39 — Notification Schedule
 
-### Acceptance Criteria
+Replaces "Notification Schedule." The send condition changes from a single global check ("today's
+briefing exists and is complete") to a per-user check — only send to a given user once their
+`user_briefings` row for today exists, matching Milestone 19's per-user generation job. Job
+execution still logged in `job_runs`; manual trigger still available for testing.
 
-- App can request notification permission.
-- App can retrieve Expo push token on a physical device.
-- App handles denied permissions gracefully.
-- No notification logic is hardcoded inside UI screens.
+## Milestone 40 — Backend QA & Error Handling
 
-### Definition of Done
+Same objective as the original Milestone 46 (harden external-API/OpenAI/database failure handling,
+job failure logging, admin endpoint protection), but the test list is updated to the endpoints that
+actually exist now: `GET /health`, `GET`/`PUT /v1/users/me/preferences`, the personalized briefing
+endpoint from Milestone 20, and `POST /v1/notifications/register` — not the old
+`/briefings/today`/`/events/{event_id}` pair.
 
-The mobile app can register for push notifications.
+## Milestone 41 — Mobile QA & Device Testing
 
-### Suggested Commit
+Same device/screen-size matrix as the original Milestone 47, but scenarios updated: drop "Event
+detail open" (no longer exists) and reframe "No news articles"/"No FRED data" as "no supporting
+news" / "no supporting chart data" (Milestones 30/31's optional Home Screen sections, not a
+required detail page). Add the sign-up/sign-in and onboarding (category/topics) flow as an
+explicit first-open scenario, since that's now part of every new user's path through the app.
 
-`feat: configure Expo push notifications`
+## Milestone 42 — Production Backend Deployment
 
-### Claude Code Tutor Prompt
+Unchanged from the original scope: deploy FastAPI (Render/Railway/Fly.io), configure environment
+variables, verify the database connection and health endpoint, confirm the scheduled daily
+personalization job (Milestone 23) can run in production.
 
-> Help me configure Expo push notifications for Walris. Explain how push tokens work, why
-> physical devices are required, and how to keep notification logic separate from UI components.
+## Milestone 43 — Production Supabase Configuration
 
----
+Same objective as the original Milestone 49 (production schema, indexes, secure service-role
+usage, backups, migration workflow), but the table list is corrected to what Part 2 actually built:
+`users`, `daily_data_items`, `daily_data_news`, `user_briefings`, `device_tokens`, `job_runs` — not
+the old `briefings`/`economic_events`/`enriched_events`/`fred_series`/`news_articles` set.
 
-## Milestone 42 — Notification Token API
+## Milestone 44 — Mobile Production Configuration
 
-### Objective
+Unchanged core scope (`app.json`/`eas.json`, production API URL, app icon, splash screen, bundle
+identifiers), plus one addition specific to this pivot's auth work: Clerk's free shared OAuth
+credentials for Google/Apple only work on **development** instances (verified this session) — a
+production Clerk instance needs real Google Cloud Console and Apple Developer credentials
+configured before Google/Apple sign-in works for real users. This is also the point where the
+Apple Developer Program's $99/year membership becomes a real cost, not a deferred one, since it's
+required for App Store distribution regardless of auth method.
 
-Create backend support for storing anonymous device push tokens.
+## Milestone 45 — Analytics & Basic Monitoring
 
-### Deliverables
+Same objective as the original Milestone 51, but the tracked mobile events are updated for the new
+screen set: drop `event_card_tapped`/`event_detail_viewed`, add `chart_viewed`/`news_link_opened`
+(Milestones 30/31's Home Screen sections) and `category_selected`/`topics_selected` (onboarding
+funnel visibility, Milestone 14). Keep `app_opened`, `briefing_viewed`, and the notification
+permission/opened events. Backend monitoring events (`briefing_job_success/failure`,
+`notification_job_success/failure`, `external_api_failure`, `openai_validation_failure`) are
+unchanged — the job-level shape didn't change, just who it runs for (every user, not once
+globally).
 
-Create endpoint: `POST /notifications/register`
+## Milestone 46 — Performance Pass
 
-Request body:
+Same target list as the original Milestone 52, minus "Event detail load" (no longer exists) —
+home-briefing load, cold app open, backend health check, and briefing-generation targets all still
+apply unchanged. "Backend uses cached/pre-generated briefing data" still holds exactly as before,
+matching the daily per-user pre-generation job.
 
-```text
-expo_push_token
-device_id
-platform
-timezone
-```
+## Milestone 47 — App Store Assets
 
-Backend should:
+Unchanged core scope (icon, splash screen, screenshots, description, keywords, support/privacy
+URLs, tagline), except the privacy policy needs to describe what's actually collected now — email,
+category/topic preferences, and notification tokens tied to a real account — not "anonymous
+notification token storage," which no longer describes this app.
 
-- Validate token payload with Pydantic
-- Store token in Supabase
-- Avoid duplicate active tokens
-- Update existing token records when needed
+## Milestone 48 — Beta Distribution
 
-### Acceptance Criteria
+Unchanged from the original scope: TestFlight / Google Play Internal Testing, recruit testers,
+collect structured feedback on clarity, usefulness, trust, and notification timing.
 
-- Push token can be stored from mobile app.
-- Duplicate tokens are not repeatedly inserted.
-- Invalid token requests return controlled errors.
-- No user authentication is required.
+## Milestone 49 — Launch Readiness Checklist
 
-### Definition of Done
+Same structure as the original Milestone 55, with two Product-checklist corrections: drop "Event
+detail works" (no longer exists), and replace "No-auth experience works" with "Sign-up/sign-in +
+onboarding flow works" — V1 requires authentication, so there's no no-auth path left to verify.
+Backend/Database/Mobile/Legal checklist items are otherwise unchanged.
 
-Walris can persist anonymous device notification tokens.
+## Milestone 50 — Public Launch
 
-### Suggested Commit
-
-`feat: add notification token registration endpoint`
-
-### Claude Code Tutor Prompt
-
-> Help me build the notification token registration endpoint for Walris. Explain how to store
-> anonymous device tokens safely without user authentication.
-
----
-
-## Milestone 43 — Notification Registration Flow
-
-### Objective
-
-Connect mobile notification registration to the backend.
-
-### Deliverables
-
-Implement mobile flow:
-
-```text
-App opens
-  ↓
-Ask permission at appropriate moment
-  ↓
-Get Expo push token
-  ↓
-POST token to FastAPI
-  ↓
-Store registration status locally
-```
-
-Use local storage to avoid asking repeatedly.
-
-Recommended library: `@react-native-async-storage/async-storage`
-
-### Acceptance Criteria
-
-- Users are not spammed with permission prompts.
-- Granted tokens are sent to backend.
-- Denied permissions do not break the app.
-- Registration status persists across app restarts.
-
-### Definition of Done
-
-Push notification registration works end to end.
-
-### Suggested Commit
-
-`feat: connect push token registration flow`
-
-### Claude Code Tutor Prompt
-
-> Help me implement the full push notification registration flow in the mobile app. Explain when
-> to ask for permission and how to avoid annoying users.
-
----
-
-## Milestone 44 — Morning Notification Sender
-
-### Objective
-
-Send the daily morning push notification.
-
-### Deliverables
-
-Create backend service: `services/notification_service.py`
-
-Service should:
-
-- Fetch active device tokens
-- Send Expo push notifications
-- Handle failed tokens
-- Mark invalid tokens inactive
-- Log notification results
-
-Notification copy:
-
-> View this morning's top 5 economic events.
-
-### Acceptance Criteria
-
-- Notification can be sent to registered devices.
-- Failed sends are logged.
-- Invalid tokens are handled.
-- Notification opens app to home screen.
-
-### Definition of Done
-
-Walris can send the morning briefing notification.
-
-### Suggested Commit
-
-`feat: add morning notification sender`
-
-### Claude Code Tutor Prompt
-
-> Help me build the notification sending service for Walris. Explain Expo push notification
-> delivery, invalid tokens, retries, and logging.
-
----
-
-## Milestone 45 — Notification Schedule
-
-### Objective
-
-Automate the morning notification job.
-
-### Deliverables
-
-Schedule notification job for: 7:00 AM ET daily
-
-Notification should only send if:
-
-- Today's briefing exists
-- Briefing status is complete
-- At least one event exists
-- Active device tokens exist
-
-### Acceptance Criteria
-
-- Notification job runs automatically.
-- Job does not send when briefing is missing.
-- Job execution is logged in `job_runs`.
-- Manual trigger exists for testing.
-
-### Definition of Done
-
-Morning notifications are automated.
-
-### Suggested Commit
-
-`feat: schedule morning briefing notifications`
-
-### Claude Code Tutor Prompt
-
-> Help me schedule the morning notification job. Explain how to ensure notifications only send
-> after today's briefing has been generated successfully.
-
----
-
-## Milestone 46 — Backend QA & Error Handling
-
-### Objective
-
-Harden the backend before production deployment.
-
-### Deliverables
-
-Review and improve:
-
-- External API failure handling
-- OpenAI failure handling
-- Database error handling
-- Job failure logging
-- Empty briefing responses
-- Invalid event IDs
-- Admin endpoint protection
-
-Add tests for:
-
-```text
-GET /health
-GET /briefings/today
-GET /events/{event_id}
-POST /notifications/register
-```
-
-### Acceptance Criteria
-
-- Backend does not crash from expected external API failures.
-- Missing data produces controlled responses.
-- Admin endpoints require secret protection.
-- Tests pass locally and in CI.
-
-### Definition of Done
-
-Backend is stable enough for staging deployment.
-
-### Suggested Commit
-
-`test: harden backend error handling`
-
-### Claude Code Tutor Prompt
-
-> Help me QA the Walris backend. Walk me through expected failure modes and help me write tests
-> for the most important endpoints.
-
----
-
-## Milestone 47 — Mobile QA & Device Testing
-
-### Objective
-
-Test the mobile application on realistic devices and screen sizes.
-
-### Deliverables
-
-Test on:
-
-- Small iPhone
-- Large iPhone
-- Common Android phone
-- iOS simulator
-- Android emulator
-- Physical device for notifications
-
-Scenarios:
-
-- First app open
-- Briefing loaded
-- No briefing available
-- Backend unavailable
-- Event detail open
-- No news articles
-- No FRED data
-- Notification permission granted
-- Notification permission denied
-
-### Acceptance Criteria
-
-- No major UI breakage on supported phones.
-- App does not crash during expected failure states.
-- Notification registration works on physical device.
-- Touch targets are usable.
-
-### Definition of Done
-
-Mobile app is ready for beta distribution.
-
-### Suggested Commit
-
-`test: complete mobile QA pass`
-
-### Claude Code Tutor Prompt
-
-> Help me create and run a mobile QA checklist for Walris. Focus on real-device testing, screen
-> sizes, loading states, error states, and notification behavior.
-
----
-
-## Milestone 48 — Production Backend Deployment
-
-### Objective
-
-Deploy FastAPI backend to production.
-
-### Recommended Options
-
-Use one: Render, Railway, Fly.io
-
-Deliverables:
-
-- Production backend URL
-- Environment variables configured
-- Database connection verified
-- Health endpoint verified
-- Admin secret configured
-- Scheduled jobs configured
-
-### Acceptance Criteria
-
-- Production `/health` endpoint returns success.
-- Backend can connect to Supabase.
-- External API keys work in production.
-- Scheduled briefing job can run in production.
-- Logs are accessible.
-
-### Definition of Done
-
-Walris backend is live.
-
-### Suggested Commit
-
-`chore: deploy backend to production`
-
-### Claude Code Tutor Prompt
-
-> Help me deploy the Walris FastAPI backend to production. Explain environment variables,
-> production logging, health checks, and deployment tradeoffs.
-
----
-
-## Milestone 49 — Production Supabase Configuration
-
-### Objective
-
-Prepare Supabase for production use.
-
-### Deliverables
-
-Configure:
-
-- Production schema
-- Database indexes
-- Secure service role usage
-- Backups
-- Connection pooling if needed
-- Migration workflow
-
-Confirm tables:
-
-```text
-briefings
-economic_events
-enriched_events
-fred_series
-news_articles
-device_tokens
-job_runs
-```
-
-### Acceptance Criteria
-
-- Production database schema matches migrations.
-- Backend can read/write production data.
-- No service role key exists in mobile app.
-- Basic indexes exist for date/event queries.
-
-### Definition of Done
-
-Supabase production database is ready.
-
-### Suggested Commit
-
-`chore: configure production Supabase database`
-
-### Claude Code Tutor Prompt
-
-> Help me prepare Supabase for production. Explain database security, indexes, migrations,
-> backups, and why service role keys must never be exposed to the mobile app.
-
----
-
-## Milestone 50 — Mobile Production Configuration
-
-### Objective
-
-Prepare the Expo app for production builds.
-
-### Deliverables
-
-Configure:
-
-- `app.json` / `app.config.ts`
-- `eas.json`
-- production API base URL
-- app icon
-- splash screen
-- bundle identifiers
-- Android package name
-- iOS bundle ID
-
-### Acceptance Criteria
-
-- App points to production backend.
-- App has production app name: Walris.
-- App icon and splash screen are configured.
-- EAS build config exists.
-
-### Definition of Done
-
-Mobile app can be built for iOS and Android production.
-
-### Suggested Commit
-
-`chore: configure Expo production builds`
-
-### Claude Code Tutor Prompt
-
-> Help me configure Expo and EAS for production builds. Explain bundle identifiers, app icons,
-> splash screens, and environment-specific API URLs.
-
----
-
-## Milestone 51 — Analytics & Basic Monitoring
-
-### Objective
-
-Add basic visibility into user behavior and system health.
-
-### Recommended MVP Analytics
-
-Use one: PostHog, Expo Analytics-compatible tool, Firebase Analytics
-
-Track:
-
-```text
-app_opened
-briefing_viewed
-event_card_tapped
-event_detail_viewed
-news_article_opened
-notification_permission_granted
-notification_permission_denied
-notification_opened
-```
-
-Backend monitoring should track:
-
-```text
-briefing_job_success
-briefing_job_failure
-notification_job_success
-notification_job_failure
-external_api_failure
-openai_validation_failure
-```
-
-### Acceptance Criteria
-
-- Basic product events are tracked.
-- Backend job failures are observable.
-- Analytics do not store sensitive personal information.
-
-### Definition of Done
-
-Walris has minimal analytics and monitoring for beta testing.
-
-### Suggested Commit
-
-`feat: add basic analytics and monitoring`
-
-### Claude Code Tutor Prompt
-
-> Help me add lightweight analytics and monitoring to Walris. Explain which product events matter
-> for an MVP and how to avoid collecting unnecessary personal data.
-
----
-
-## Milestone 52 — Performance Pass
-
-### Objective
-
-Ensure the app feels fast and reliable.
-
-### Target Performance
-
-```text
-Home briefing load: under 2 seconds
-Event detail load: under 2 seconds
-Cold app open: under 3 seconds
-Backend health check: under 300ms
-Briefing generation: under 5 minutes
-```
-
-Review:
-
-- API response size
-- Query performance
-- Image usage
-- Chart rendering
-- Network error handling
-- Loading skeletons
-- Pull-to-refresh behavior
-
-### Acceptance Criteria
-
-- Home screen loads quickly with production backend.
-- Event detail screen loads quickly.
-- No unnecessary external API calls happen from mobile.
-- Backend uses cached/pre-generated briefing data.
-
-### Definition of Done
-
-Walris meets MVP performance expectations.
-
-### Suggested Commit
-
-`perf: optimize app and backend performance`
-
-### Claude Code Tutor Prompt
-
-> Help me run a performance pass on Walris. Explain how to identify slow frontend rendering, slow
-> API responses, and unnecessary network requests.
-
----
-
-## Milestone 53 — App Store Assets
-
-### Objective
-
-Prepare required assets for Apple App Store and Google Play.
-
-### Deliverables
-
-Create:
-
-- App icon
-- Splash screen
-- App screenshots
-- App description
-- Short description
-- Keywords
-- Support URL
-- Privacy policy URL
-- Marketing tagline
-
-Example tagline:
-
-> Understand today's economy in under five minutes.
-
-### Acceptance Criteria
-
-- Required assets exist for both stores.
-- App description clearly communicates value.
-- Privacy policy explains anonymous notification token storage.
-- Screenshots show real app UI.
-
-### Definition of Done
-
-Walris is ready for store listing creation.
-
-### Suggested Commit
-
-`docs: add app store launch assets`
-
-### Claude Code Tutor Prompt
-
-> Help me prepare App Store and Google Play launch assets for Walris. Explain what assets are
-> required and how to write a clear app description.
-
----
-
-## Milestone 54 — Beta Distribution
-
-### Objective
-
-Distribute Walris to a small group of testers.
-
-### Deliverables
-
-Use: TestFlight for iOS, Google Play Internal Testing for Android
-
-Recruit testers:
-
-- Economics students
-- Finance students
-- Retail investors
-- Curious professionals
-- Friends who follow business news
-
-Collect feedback on:
-
-- Clarity
-- Usefulness
-- Trust
-- Visual design
-- Notification timing
-- Confusing language
-- Missing context
-
-### Acceptance Criteria
-
-- At least 10 users test the app.
-- Feedback is collected in one document.
-- Bugs are triaged.
-- Product feedback is separated from technical bugs.
-
-### Definition of Done
-
-Walris has completed first external beta test.
-
-### Suggested Commit
-
-`docs: add beta testing feedback plan`
-
-### Claude Code Tutor Prompt
-
-> Help me plan Walris beta testing. Explain how to recruit testers, collect structured feedback,
-> and separate bugs from product insights.
-
----
-
-## Milestone 55 — Launch Readiness Checklist
-
-### Objective
-
-Confirm Walris is ready for public submission.
-
-### Checklist
-
-**Product:**
-
-- Home screen works
-- Event detail works
-- Morning notification works
-- No-auth experience works
-- Loading/error states work
-
-**Backend:**
-
-- Production backend live
-- Daily briefing job runs
-- Notification job runs
-- External APIs work
-- Logs available
-
-**Database:**
-
-- Production Supabase ready
-- Indexes added
-- Backups configured
-- No secrets exposed
-
-**Mobile:**
-
-- iOS build passes
-- Android build passes
-- App icon configured
-- Splash screen configured
-- Production API URL configured
-
-**Legal / Store:**
-
-- Privacy policy
-- Support URL
-- Store screenshots
-- App description
-- Age rating
-- Data collection disclosure
-
-### Acceptance Criteria
-
-- No known launch-blocking bugs.
-- Beta feedback has been reviewed.
-- App can be submitted to Apple and Google.
-
-### Definition of Done
-
-Walris is launch-ready.
-
-### Suggested Commit
-
-`docs: add launch readiness checklist`
-
-### Claude Code Tutor Prompt
-
-> Help me run a final launch readiness review for Walris. Act like a senior engineer and product
-> manager reviewing whether the app is ready for App Store submission.
-
----
-
-## Milestone 56 — Public Launch
-
-### Objective
-
-Submit Walris to the App Store and Google Play.
-
-### Deliverables
-
-Submit:
-
-- Apple App Store build
-- Google Play build
-- Store listing metadata
-- Screenshots
-- Privacy disclosures
-
-Post-launch monitor:
-
-- Crashes
-- Backend errors
-- Daily job success
-- Notification delivery
-- User feedback
-- App reviews
-
-### Acceptance Criteria
-
-- App submitted successfully.
-- Review issues are addressed if returned.
-- Production monitoring is active.
-- Post-launch feedback collection begins.
-
-### Definition of Done
-
-Walris is publicly available or pending approval.
-
-### Suggested Commit
-
-`chore: prepare public launch`
-
-### Claude Code Tutor Prompt
-
-> Help me prepare Walris for public launch. Explain what to monitor immediately after launch and
-> how to respond to App Store or Google Play review issues.
-
----
+Unchanged from the original scope: submit to the App Store and Google Play, monitor crashes,
+backend errors, daily job success, notification delivery, and user feedback post-launch.
 
 ## Part 4 Complete
 
-After Milestone 56, Walris will have:
+After Milestone 50, Walris will have:
 
-- Push notification registration
-- Morning notification delivery
-- Backend QA
-- Mobile QA
-- Production backend
-- Production Supabase setup
+- Push notification registration and delivery, tied to signed-in users
+- Backend QA against the actual current endpoint set
+- Mobile QA against the actual current screen set
+- Production backend and Supabase configuration matching the real schema
+- Production Google/Apple OAuth credentials
 - Production Expo builds
-- Basic analytics
-- Performance validation
-- App Store assets
+- Basic analytics and performance validation
+- App Store assets with an accurate privacy policy
 - Beta testing
 - Launch checklist
 - Public release process
