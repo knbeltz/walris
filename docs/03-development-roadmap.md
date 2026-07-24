@@ -757,12 +757,11 @@ Walris will have:
 At this point, Walris has its core personalized intelligence engine.
 
 The next phase should focus on building the mobile app experience that consumes this backend —
-**note: the milestone numbers below (formerly 27+) have not been renumbered to close the gap left
-by replacing the old 12-milestone event pipeline with this pivot's 11 milestones (13-23). More
-importantly, Milestones 27-45 as written still assume no authentication and one shared global
-briefing throughout — they need their own re-scoping pass against this pivot (sign-up/onboarding
-screens, per-user data fetching, personalized notification copy) before being started as-is. Don't
-treat the content below as current without that review.**
+Part 3 (Milestones 24-34) has now been re-scoped against this pivot; see that section below.
+**Part 4 (currently Milestones 41-56) has not been re-scoped yet** — it still assumes no
+authentication, one shared global briefing, and the old Part 3 milestone numbers/endpoints (e.g.
+`/briefings/today`, event cards). Don't treat that section as current without its own re-scoping
+pass, same caveat as before, just narrowed now that Part 3 is resolved.
 
 ---
 
@@ -770,668 +769,117 @@ treat the content below as current without that review.**
 
 **Document:** docs/03-development-roadmap.md
 **Version:** 1.0
-**Phase:** Part 3 – Mobile App
+**Phase:** Part 3 – Mobile App (Personalization Pivot)
 
 ---
 
 ## Part 3 Overview
 
-Part 3 builds the mobile experience that users will actually interact with.
+**Replaces the original Milestones 27-40** (scoped around a shared "top 5 events" list with
+individual event detail pages — abandoned along with the rest of the pre-pivot event model).
+Renumbered from 24 to close the gap left by the Part 2 pivot (`docs/03` §"Milestones 13–22", which
+replaced the old 12-milestone event pipeline with 11 milestones, 13-23). Full basis:
+`docs/02-system-architecture.md` §13/14, `docs/09-personalization-pivot-plan.md` §3/§10. Expand
+each into full Objective/Deliverables/Acceptance-Criteria detail when it's actually started, same
+mentor workflow as every prior milestone.
 
 By the end of this phase, the React Native app should be able to:
 
-- Fetch today's briefing from the FastAPI backend
-- Display the top 5 economic events
-- Show event detail pages
+- Authenticate every backend request with the signed-in user's Clerk session token
+- Fetch and render the signed-in user's personalized daily briefing: the AI-generated narrative,
+  supporting key-indicator chart(s), and supporting news links — replacing the old shared "top 5
+  events" list and its per-event detail page
 - Render loading, empty, and error states
 - Apply the Walris design system
 - Validate backend API responses with Zod
 - Feel polished enough for early beta testing
 
----
-
-## Milestone 27 — Mobile API Client
-
-### Objective
-
-Create the frontend API layer that communicates with the FastAPI backend.
-
-### Deliverables
-
-Create:
-
-```text
-mobile/lib/api.ts
-mobile/lib/apiClient.ts
-mobile/lib/env.ts
-```
-
-Implement:
-
-- Base API client
-- Environment-based API URL
-- Request helper
-- Error handling
-- Timeout handling
-
-### Acceptance Criteria
-
-- Mobile app can call the backend reliably.
-- API base URL comes from environment config.
-- Failed requests return controlled errors.
-- No external API keys exist in the mobile app.
-
-### Definition of Done
-
-The mobile app has a clean API layer and does not call backend endpoints directly from UI
-components.
-
-### Suggested Commit
-
-`feat: add mobile API client`
-
-### Claude Code Tutor Prompt
-
-> Help me build a clean API client for the Walris React Native app. Explain how to separate API
-> logic from UI components and how to safely handle request failures.
+**Note:** Part 4 (currently Milestones 41-56: notifications, QA, deployment, launch) still assumes
+the old event model and the old Part 3 milestone numbers in places (e.g. references to
+`/briefings/today`, event cards). It needs its own renumbering/re-scoping pass before being started
+as-is — not addressed in this pass, same caveat this document already carried forward from the
+Part 2 rewrite.
 
 ---
 
-## Milestone 28 — Frontend Response Schemas
+## Milestone 24 — Mobile API Client
 
-### Objective
+Base fetch wrapper, environment-based API URL, request/error/timeout handling — same shape as the
+original Milestone 27, plus one addition the personalization pivot requires: nearly every endpoint
+is now per-user, so authenticated requests need the signed-in user's Clerk session token (via
+`useAuth()`'s `getToken()`) attached as an `Authorization: Bearer` header. No external API keys
+live in the mobile app.
 
-Add runtime validation for backend responses.
+## Milestone 25 — Frontend Response Schemas
 
-### Deliverables
+Zod schemas validating the new personalized-briefing response shape (AI-generated narrative text,
+supporting indicator values, supporting news items) and the `UserPreferences` shape from Milestone
+14 — replaces the old schemas built around discrete `briefing`/`event`/`news` objects.
 
-Create:
+## Milestone 26 — TanStack Query Hooks
 
-```text
-mobile/lib/schemas/briefing.ts
-mobile/lib/schemas/event.ts
-mobile/lib/schemas/news.ts
-```
+`useTodayBriefing` for the signed-in user's personalized daily briefing, with loading/error/refetch
+support and stable query keys. No `useEventDetail` — there's no discrete event left to fetch.
 
-Use Zod to validate:
+## Milestone 27 — Walris Theme Tokens
 
-- Today briefing response
-- Event detail response
-- News article objects
-- Error responses
+Unchanged from the original scope: design tokens (colors, typography, spacing, radius) centralized
+under `mobile/theme/`, applied instead of hardcoded values, matching the approved Walris design
+direction.
 
-### Acceptance Criteria
+## Milestone 28 — App Layout Shell
 
-- API responses are validated before entering UI.
-- Invalid backend responses produce controlled app errors.
-- TypeScript types are inferred from Zod schemas.
+Unchanged from the original scope: safe area handling, page container, scroll layout, standard
+spacing and margins, reusable across every future screen.
 
-### Definition of Done
+## Milestone 29 — Daily Briefing Header
 
-The mobile app has runtime type safety for all backend API responses.
+App name, current date, and the signed-in user's name/greeting where relevant — replaces the old
+generic version, which had no concept of a signed-in user to greet.
 
-### Suggested Commit
+## Milestone 30 — Key Indicator Chart Component
 
-`feat: add frontend API response validation`
+Replaces the old "Basic Historical Chart" (previously an event-detail-page feature, Milestone 38).
+Now a Home Screen building block: a lightweight chart rendering one or more of the FRED indicators
+referenced in that day's personalized narrative, rather than a chart tied to one discrete event.
 
-### Claude Code Tutor Prompt
+## Milestone 31 — Supporting News Cards
 
-> Help me define Zod schemas for Walris API responses. Explain the difference between TypeScript
-> compile-time safety and runtime validation.
+Replaces "News Article Cards" (previously Milestone 37, tied to an individual event's detail page).
+Cards linking out to the source Marketaux articles behind that day's personalized narrative.
 
----
+## Milestone 32 — Home Screen
 
-## Milestone 29 — TanStack Query Hooks
+Assembles Milestones 29-31 into the actual home screen: header, the AI-generated narrative,
+supporting key-indicator chart(s), supporting news cards, loading/empty/error states, and
+pull-to-refresh. Replaces the old "top 5 event list" home screen entirely — there's no per-event
+navigation, since Milestones 35/36 from the original Part 3 (event detail route + content sections)
+no longer apply under this model.
 
-### Objective
+## Milestone 33 — Empty, Error, and Loading States
 
-Create reusable data-fetching hooks.
+Unchanged in concept from the original scope: resilient UI for no-briefing-yet, backend-unavailable,
+and loading states, with a consistent way to retry failed requests.
 
-### Deliverables
+## Milestone 34 — Mobile Integration Test Pass
 
-Create:
-
-```text
-mobile/hooks/useTodayBriefing.ts
-mobile/hooks/useEventDetail.ts
-```
-
-Implement:
-
-- `useTodayBriefing`
-- `useEventDetail`
-- Loading state support
-- Error state support
-- Refetch behavior
-
-### Acceptance Criteria
-
-- Screens consume data through hooks, not raw API calls.
-- Loading and error states are exposed clearly.
-- Query keys are stable and predictable.
-
-### Definition of Done
-
-Frontend data fetching is centralized and reusable.
-
-### Suggested Commit
-
-`feat: add briefing query hooks`
-
-### Claude Code Tutor Prompt
-
-> Help me build TanStack Query hooks for today's briefing and event detail data. Explain query
-> keys, caching, loading states, and error states.
-
----
-
-## Milestone 30 — Walris Theme Tokens
-
-### Objective
-
-Implement the Walris design system in the mobile app.
-
-### Deliverables
-
-Create:
-
-```text
-mobile/theme/colors.ts
-mobile/theme/typography.ts
-mobile/theme/spacing.ts
-mobile/theme/radius.ts
-```
-
-Implement design tokens from the Walris design file:
-
-- Background colors
-- Surface colors
-- Text colors
-- Primary colors
-- Data green
-- Alert red
-- Border colors
-- Spacing scale
-- Radius scale
-- Typography references
-
-### Acceptance Criteria
-
-- Design tokens are centralized.
-- Components do not hardcode colors or spacing.
-- Theme values match the approved Walris design direction.
-
-### Definition of Done
-
-The app has a reusable visual foundation.
-
-### Suggested Commit
-
-`feat: implement Walris theme tokens`
-
-### Claude Code Tutor Prompt
-
-> Help me translate the Walris design system into reusable React Native theme tokens. Explain how
-> design tokens prevent inconsistent UI.
-
----
-
-## Milestone 31 — App Layout Shell
-
-### Objective
-
-Create the base mobile application layout.
-
-### Deliverables
-
-Implement:
-
-- Safe area handling
-- App background
-- Page container
-- Scroll layout
-- Standard horizontal margins
-- Header spacing
-
-Create:
-
-```text
-mobile/components/layout/AppScreen.tsx
-mobile/components/layout/PageHeader.tsx
-```
-
-### Acceptance Criteria
-
-- Screens respect safe areas.
-- Layout works on small and large phones.
-- Content spacing follows the 8px design scale.
-- No screen content touches device edges.
-
-### Definition of Done
-
-All future screens can reuse a shared layout system.
-
-### Suggested Commit
-
-`feat: add mobile layout shell`
-
-### Claude Code Tutor Prompt
-
-> Help me create a reusable mobile layout shell for Walris. Explain safe areas, spacing, and why
-> layout components should be reusable.
-
----
-
-## Milestone 32 — Daily Briefing Header
-
-### Objective
-
-Build the top section of the home screen.
-
-### Deliverables
-
-Create: `mobile/components/briefing/DailyBriefingHeader.tsx`
-
-Displays:
-
-- Walris name
-- Current date
-- Briefing title
-- Daily summary
-- Last generated timestamp if available
-
-### Acceptance Criteria
-
-- Header renders real API data.
-- Typography follows design system.
-- Layout is readable on small phones.
-- Missing summary values are handled gracefully.
-
-### Definition of Done
-
-The home screen has a polished editorial-style briefing header.
-
-### Suggested Commit
-
-`feat: add daily briefing header`
-
-### Claude Code Tutor Prompt
-
-> Help me build the DailyBriefingHeader component for Walris. Focus on clean component props,
-> typography hierarchy, and mobile readability.
-
----
-
-## Milestone 33 — Event Card Component
-
-### Objective
-
-Build the reusable card for economic events.
-
-### Deliverables
-
-Create: `mobile/components/events/EventCard.tsx`
-
-Event card displays:
-
-- Event name
-- Country
-- Release time
-- Importance score
-- Actual value
-- Forecast value
-- Previous value
-- Plain-English summary
-- Affected group chips
-
-### Acceptance Criteria
-
-- Card renders real event data.
-- Missing actual/forecast/previous values are handled.
-- Importance score is visually clear.
-- Card is touchable and navigates to event detail.
-
-### Definition of Done
-
-The primary content unit of the app is complete.
-
-### Suggested Commit
-
-`feat: add economic event card component`
-
-### Claude Code Tutor Prompt
-
-> Help me build the EventCard component for Walris. Explain how to design a reusable, data-rich
-> card without making the UI feel crowded.
-
----
-
-## Milestone 34 — Home Screen
-
-### Objective
-
-Assemble the main app experience.
-
-### Deliverables
-
-Implement: `mobile/app/index.tsx`
-
-Home screen includes:
-
-- Daily briefing header
-- Top 5 event list
-- Loading state
-- Error state
-- Empty state
-- Pull-to-refresh
-
-### Acceptance Criteria
-
-- Home screen fetches `/briefings/today`.
-- Top 5 events render correctly.
-- User can refresh manually.
-- User can tap an event card.
-- Screen handles no briefing available.
-
-### Definition of Done
-
-Users can open Walris and view today's briefing.
-
-### Suggested Commit
-
-`feat: build today briefing home screen`
-
-### Claude Code Tutor Prompt
-
-> Help me build the Walris home screen using the data-fetching hooks and reusable components.
-> Explain how to structure loading, error, empty, and success states.
-
----
-
-## Milestone 35 — Event Detail Screen Structure
-
-### Objective
-
-Create the detail route and screen shell for individual economic events.
-
-### Deliverables
-
-Create: `mobile/app/event/[id].tsx`
-
-Implement:
-
-- Route parameter handling
-- Event detail query
-- Loading state
-- Error state
-- Back navigation
-- Scroll layout
-
-### Acceptance Criteria
-
-- Event detail screen opens from event card.
-- Correct event ID is passed through navigation.
-- Screen fetches `/events/{event_id}`.
-- Loading and error states render correctly.
-
-### Definition of Done
-
-Navigation from home to event detail works end to end.
-
-### Suggested Commit
-
-`feat: add event detail route`
-
-### Claude Code Tutor Prompt
-
-> Help me build the event detail route using Expo Router. Explain dynamic routing, route params,
-> and how to fetch data for detail screens.
-
----
-
-## Milestone 36 — Event Detail Content Components
-
-### Objective
-
-Build the content sections used on the event detail page.
-
-### Deliverables
-
-Create:
-
-```text
-mobile/components/events/EventDataPanel.tsx
-mobile/components/events/ImportanceSection.tsx
-mobile/components/events/HistoricalContextSection.tsx
-mobile/components/events/NewsContextSection.tsx
-mobile/components/events/AffectedGroupsSection.tsx
-```
-
-Sections display:
-
-- Actual vs forecast vs previous
-- Importance explanation
-- Plain-English summary
-- Historical context
-- News context
-- Affected groups
-
-### Acceptance Criteria
-
-- Each section is reusable and independently testable.
-- Missing optional data does not break rendering.
-- Data values use JetBrains Mono styling where appropriate.
-- Section hierarchy is easy to scan.
-
-### Definition of Done
-
-Event detail screen has all core explanatory content.
-
-### Suggested Commit
-
-`feat: build event detail content sections`
-
-### Claude Code Tutor Prompt
-
-> Help me build modular event detail components for Walris. Explain how to break a complex detail
-> page into maintainable sections.
-
----
-
-## Milestone 37 — News Article Cards
-
-### Objective
-
-Display related Marketaux articles on the event detail page.
-
-### Deliverables
-
-Create:
-
-```text
-mobile/components/news/NewsArticleCard.tsx
-mobile/components/news/RelatedArticlesList.tsx
-```
-
-Article card displays:
-
-- Headline
-- Source
-- Published time
-- Summary
-- Sentiment or topic chips if available
-- External link behavior
-
-### Acceptance Criteria
-
-- Related articles render correctly.
-- Tapping an article opens the URL in browser.
-- Missing article metadata is handled.
-- Article cards match Walris editorial style.
-
-### Definition of Done
-
-Users can view and open supporting news coverage.
-
-### Suggested Commit
-
-`feat: add related news article cards`
-
-### Claude Code Tutor Prompt
-
-> Help me build related news article components for Walris. Explain best practices for linking
-> out to external articles from a mobile app.
-
----
-
-## Milestone 38 — Basic Historical Chart
-
-### Objective
-
-Add a simple chart for FRED historical context.
-
-### Deliverables
-
-Choose a lightweight charting library compatible with Expo.
-
-Create: `mobile/components/charts/HistoricalLineChart.tsx`
-
-Chart should show:
-
-- Historical FRED values
-- Latest value
-- Simple trend visualization
-
-### Acceptance Criteria
-
-- Chart renders on iOS and Android.
-- Chart handles empty data.
-- Chart does not slow down the detail screen.
-- Data labels remain readable on phones.
-
-### Definition of Done
-
-Event detail pages can show historical context visually.
-
-### Suggested Commit
-
-`feat: add historical line chart`
-
-### Claude Code Tutor Prompt
-
-> Help me add a simple historical line chart to Walris. Explain how to choose a React Native
-> charting library and keep the chart performant.
-
----
-
-## Milestone 39 — Empty, Error, and Loading States
-
-### Objective
-
-Make the app resilient and user-friendly when data is missing or delayed.
-
-### Deliverables
-
-Create:
-
-```text
-mobile/components/states/LoadingState.tsx
-mobile/components/states/ErrorState.tsx
-mobile/components/states/EmptyState.tsx
-```
-
-Implement states for:
-
-- Home screen loading
-- Home screen no briefing
-- Backend unavailable
-- Event detail loading
-- Event not found
-- No related news
-- No FRED historical data
-
-### Acceptance Criteria
-
-- No blank screens exist.
-- All known failure states show helpful UI.
-- User can retry failed requests.
-- States use consistent design language.
-
-### Definition of Done
-
-The app behaves gracefully when things go wrong.
-
-### Suggested Commit
-
-`feat: add mobile loading and error states`
-
-### Claude Code Tutor Prompt
-
-> Help me design loading, empty, and error states for Walris. Explain how resilient UI improves
-> perceived product quality.
-
----
-
-## Milestone 40 — Mobile Integration Test Pass
-
-### Objective
-
-Verify the mobile app works end to end with the backend.
-
-### Deliverables
-
-Test:
-
-- Home screen fetch
-- Event card rendering
-- Event detail navigation
-- Event detail fetch
-- News links
-- Loading state
-- Error state
-- Empty state
-- Pull-to-refresh
-
-### Acceptance Criteria
-
-- App works on iOS simulator.
-- App works on Android emulator.
-- App handles backend down state.
-- App renders real backend data correctly.
-
-### Definition of Done
-
-Walris mobile app is ready for notification implementation and visual polish.
-
-### Suggested Commit
-
-`test: validate mobile app integration`
-
-### Claude Code Tutor Prompt
-
-> Help me test the Walris mobile app end to end. I want to verify real backend integration,
-> navigation, loading states, and error states before adding notifications.
-
----
+Unchanged in concept from the original scope: end-to-end verification of the full personalized
+flow — sign-in → onboarding (category/topics) → home screen fetch → real backend data — on both
+iOS and Android, including the backend-down state.
 
 ## Mobile App Phase Complete
 
-After Milestone 40, Walris will have:
+After Milestone 34, Walris will have:
 
-- React Native frontend API layer
+- React Native frontend API layer, with Clerk-authenticated requests
 - Runtime response validation with Zod
-- TanStack Query data fetching
+- TanStack Query data fetching for the personalized briefing
 - Walris theme tokens
-- Home screen
-- Daily briefing header
-- Event cards
-- Event detail screen
-- Historical chart
-- Related news cards
+- Home screen rendering the personalized narrative, supporting chart(s), and supporting news
 - Loading, empty, and error states
-- End-to-end mobile/backend integration
+- End-to-end mobile/backend integration, verified on iOS and Android
 
-At this point, Walris should feel like a real mobile product.
+At this point, Walris should feel like a real, personalized mobile product.
 
 The next phase should focus on:
 
@@ -1441,6 +889,8 @@ The next phase should focus on:
 - Polish
 - Deployment
 - App Store / Google Play preparation
+
+(See this section's note above — Part 4 below still needs its own re-scoping pass before starting.)
 
 ---
 
