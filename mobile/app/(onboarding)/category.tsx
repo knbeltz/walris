@@ -80,13 +80,12 @@ export default function CategorySelectionScreen() {
         }
 
         try {
-            // Request the JWT for the currently active Clerk session. 
+            // Request the JWT for the currently active Clerk session.
             const token = await getToken();
 
             if (!token) {
                 throw new Error('You must be signed in to continue.')
             }
-        }
 
         const response = await fetch(
             `${process.env.EXPO_PUBLIC_API_BASE_URL}/v1/users/me/preferences`,
@@ -98,6 +97,7 @@ export default function CategorySelectionScreen() {
                 },
                 body: JSON.stringify({
                     category: selectedCategory,
+                    additional_topics: []
                 }),
             },
         );
@@ -111,8 +111,18 @@ export default function CategorySelectionScreen() {
             );
         }
 
-        // Only advance after the backend confirms a successful update. 
+        router.push('/topics');
+    }   catch (error: unknown) {
+        console.error('Preference submission failed:', error);
+
+        if (error instanceof Error) {
+            setErrorMessage(error.message);
+        } else {
+            setErrorMessage('An unexpected error occured.');
+        }
+        }
     }
+
     return(
         <View>
             <SelectCard
@@ -128,6 +138,15 @@ export default function CategorySelectionScreen() {
                 // The selected option's value becomes the new state value.
                 onValueChange={setSelectedCategory}
             />
+
+            {errorMessage ? <Text>{errorMessage}</Text> : null}
+
+            <Button
+                onPress={handleContinue}
+                disabled={!selectedCategory}
+            >
+                <Text>Continue</Text>
+            </Button>
         </View>
     );
 }
