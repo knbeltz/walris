@@ -69,9 +69,34 @@ is Milestone 13 (User Accounts & Clerk Integration) per that plan.
 
 ## Current Milestone
 
-**Milestone 13 — User Accounts & Clerk Integration** (in progress — backend done and verified,
-mobile not started yet). Milestone 12 is complete (see below); the personalization pivot is fully
-planned in `docs/09-personalization-pivot-plan.md`.
+**Milestone 14 — Category & Topic Selection** (in progress — backend, `SelectCard`, `TopicChips`,
+`category.tsx`, `topics.tsx`, and `redirectAfterAuth` routing are all built; not yet tested
+end-to-end on a real device). Milestone 13 is complete (auth reworked from phone to email/password
++ Google/Apple after discovering phone auth is a paid Clerk feature — see below). Milestone 12 is
+complete. The personalization pivot is fully planned in `docs/09-personalization-pivot-plan.md`.
+
+### Milestone 14 progress so far (2026-07-26)
+
+**Done:**
+- `users.category`/`users.additional_topics` columns + migration.
+- `GET`/`PUT /v1/users/me/preferences` backend endpoint, wired into `v1_router`.
+- `SelectCard` (single-select) and `TopicChips` (multi-select) UI primitives, both new — first
+  custom interactive components in the app beyond button/card/badge/separator/text.
+- `app/(onboarding)/category.tsx` and `topics.tsx` — full onboarding flow: category screen submits
+  immediately, topics screen fetches existing preferences first (so it doesn't clobber the saved
+  category), then submits both together.
+- `mobile/lib/redirectAfterAuth.ts` — checks the signed-in user's saved preferences after any
+  auth success and routes to `/category` if `category` is still `null`, or `/` otherwise; falls
+  back to `/category` on any fetch failure. Wired into all six sign-in/sign-up success paths
+  (email/password, Google, Apple, across both screens).
+
+**Still to do for Milestone 14:**
+- **End-to-end device test of the whole redirect flow** — sign-up → lands on `/category` →
+  pick a category → lands on `/topics` → pick topics → lands on `/`. Not yet run on a real device;
+  planned for a later session.
+- Name field collection (decided earlier to live in this onboarding flow, not via Clerk sign-up
+  fields) — not yet added to either screen.
+- Settings screen for changing category/topics later (scoped as part of M14, not built yet).
 
 ### Milestone 13 progress so far (2026-07-20)
 
