@@ -1,4 +1,4 @@
-import { useSignUp, useSSO  } from '@clerk/expo';
+import { useSignUp, useSSO, useAuth  } from '@clerk/expo';
 import { useState } from 'react';
 import { TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -6,9 +6,12 @@ import * as AuthSession from 'expo-auth-session';
 
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
+import { redirectAfterAuth } from '@/lib/redirectAfterAuth'
 import { getErrorMessage } from '@/lib/utils';
 
 export default function SignUpScreen() {
+  const { getToken } = useAuth();
+
   const { signUp, errors, fetchStatus } = useSignUp();
 
   const { startSSOFlow } = useSSO();
@@ -99,7 +102,7 @@ export default function SignUpScreen() {
       }
 
       await signUp.finalize({
-        navigate: ({ session }) => {
+        navigate: async ({ session }) => {
           if (session?.currentTask) {
             console.log(
               'Clerk session task still required',
@@ -108,7 +111,8 @@ export default function SignUpScreen() {
             return;
           }
 
-          router.replace('/');
+            await redirectAfterAuth(getToken, router);
+
         },
       });
     } catch (error: unknown) {
@@ -152,7 +156,7 @@ export default function SignUpScreen() {
             return;
           }
 
-          router.replace('/');
+          await redirectAfterAuth(getToken, router);
         },
       });
     } catch (error: unknown) {
@@ -182,7 +186,8 @@ export default function SignUpScreen() {
         session: createdSessionId,
       });
 
-      router.replace('/');
+      await redirectAfterAuth(getToken, router);
+    
     } catch (error: unknown) {
       console.error('Apple SSO error:', error);
       setErrorMessage(getErrorMessage(error));
