@@ -1,19 +1,18 @@
+import asyncio
 import logging
-from datetime import date
 from typing import Any
 
 import httpx
-from pydantic import ValidationError
 
-from app.core.config import settings
 from app.schemas.fred_data import FredObservation
-
 
 logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = 10.0
 
 FRED_BASE_URL = "https://api.stlouisfed.org/fred"
+
+MAX_CONCURRENCY = 10
 
 FRED_INDICATORS: list[tuple[str, str]] = [
     ("CPIAUCSL", "Consumer Price Index"),
@@ -87,17 +86,17 @@ async def fetch_fred_observation(
     api_key: str,
     series_id: str,
     name: str,
-) -> FredObservation: 
+) -> FredObservation:
     response = await client.get(
-        f"{FRED_BASE_URL}/series/observations",
-        params={
-            "series_id": series_id,
-            "api_key": api_key,
-            "file_type": "json",
-            "sort_order": "desc",
-            "limit": 1,
-        },
-    )
+            f"{FRED_BASE_URL}/series/observations",
+            params={
+                "series_id": series_id,
+                "api_key": api_key,
+                "file_type": "json",
+                "sort_order": "desc",
+                "limit": 1,
+            },
+        )
 
     response.raise_for_status()
 
@@ -121,6 +120,60 @@ async def fetch_fred_observation(
         value=value,
         date=latest["date"],
     )
-    
+
+async def fetch_all(
+        api_key: str,
+) -> list[FredObservation]:
+    semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
+
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+
+        async def fetch_one(
+            series_id: str,
+            name: str,
+        ) -> FredObservation | None:
+            async with semaphore:
+                try:
+                    return await fetch_fred_observation(
+                        client=client,
+                        api_key=api_key,
+                        series_id=series_id,
+                        name=name,
+                    )
+                except httpx.HTTPError as error:
+                    _log_request_error(
+                        "Failed to fetch FRED observation",
+                        error,
+                        series_id=series_id,
+                        name=name,
+                    )
+                    return None
+
+                except ValueError:
+                    logger.exception(
+                        "FRED returned invalid or missing observation data",
+                        extra={
+                            "series_id": series_id,
+                            "name": name,
+                        }
+                    )
+                    return None
+
+        tasks = [
+            fetch_one(series_id, name)
+            for series_id, name in FRED_INDICATORS
+        ]
+
+        results = await asyncio.gather(*tasks)
+
+        return [
+            result
+            for result in results
+            if result is not None
+        ]
+
+
+
+
 
 
