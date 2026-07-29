@@ -69,13 +69,41 @@ is Milestone 13 (User Accounts & Clerk Integration) per that plan.
 
 ## Current Milestone
 
-**Milestone 14 — Category & Topic Selection** (in progress — backend, `SelectCard`, `TopicChips`,
-`category.tsx`, `topics.tsx`, and `redirectAfterAuth` routing are all built; not yet tested
-end-to-end on a real device). Milestone 13 is complete (auth reworked from phone to email/password
-+ Google/Apple after discovering phone auth is a paid Clerk feature — see below). Milestone 12 is
-complete. The personalization pivot is fully planned in `docs/09-personalization-pivot-plan.md`.
+**Milestone 17 — Daily Data Pipeline & Storage** (not yet started). Milestones 12-16 are complete
+— see progress notes below. The personalization pivot is fully planned in
+`docs/09-personalization-pivot-plan.md`.
 
-### Milestone 14 progress so far (2026-07-26)
+### Milestone 17 — up next
+
+Three pieces, per `docs/09` §8:
+1. `daily_data_items`/`daily_data_news` SQLAlchemy models + migration (first real DB storage for
+   FRED/Marketaux data — M15/M16 only fetch and normalize, they don't persist anything yet).
+2. The fetch-and-filter pipeline: FMP fetch → FRED fetch → Marketaux fetch → drop any item with
+   zero fresh news coverage that day, then persist what survives.
+3. The 48-hour deletion mechanism for this temporary data (not a permanent archive).
+
+Plan: start with the two DB models/migration, since the pipeline and deletion logic both depend on
+the tables existing first.
+
+### Milestone 16 — Marketaux Service (complete, 2026-07-29)
+
+`backend/app/schemas/marketaux_data.py` (`MarketauxArticle`) and
+`backend/app/services/marketaux_service.py` — `fetch_marketaux_articles` (single search),
+`build_news_search_items` (combines 39 FRED indicators + 3 index quotes + 11 sectors + gainer +
+loser = 55 items), `fetch_all_articles` (concurrent batch fetch, semaphore-bounded, skip-and-continue
+per item). Verified end-to-end against the live API: 129 articles across 46 of 55 items, 9 with no
+fresh coverage (expected). Found and fixed a real bug during verification: Marketaux's
+`published_after` rejects microseconds and any timezone offset/`Z` suffix — needs a bare
+`YYYY-MM-DDTHH:MM:SS` (fixed via `.strftime(...)` instead of `.isoformat()`).
+
+### Milestone 15 — FRED Service (complete, 2026-07-26)
+
+`backend/app/schemas/fred_data.py` (`FredObservation`) and `backend/app/services/fred_service.py`
+— `FRED_INDICATORS` (all 39 verified series), `fetch_fred_observation` (single indicator),
+`fetch_all` (concurrent batch fetch, same semaphore/skip-and-continue pattern as Marketaux).
+Verified end-to-end against the live API: all 39 of 39 indicators fetched successfully.
+
+### Milestone 14 — Category & Topic Selection (mostly complete, 2026-07-26)
 
 **Done:**
 - `users.category`/`users.additional_topics` columns + migration.
@@ -90,10 +118,9 @@ complete. The personalization pivot is fully planned in `docs/09-personalization
   back to `/category` on any fetch failure. Wired into all six sign-in/sign-up success paths
   (email/password, Google, Apple, across both screens).
 
-**Still to do for Milestone 14:**
+**Still to do for Milestone 14 (not blocking M15-17, but not forgotten):**
 - **End-to-end device test of the whole redirect flow** — sign-up → lands on `/category` →
-  pick a category → lands on `/topics` → pick topics → lands on `/`. Not yet run on a real device;
-  planned for a later session.
+  pick a category → lands on `/topics` → pick topics → lands on `/`. Not yet run on a real device.
 - Name field collection (decided earlier to live in this onboarding flow, not via Clerk sign-up
   fields) — not yet added to either screen.
 - Settings screen for changing category/topics later (scoped as part of M14, not built yet).
