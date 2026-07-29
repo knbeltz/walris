@@ -69,8 +69,11 @@ is Milestone 13 (User Accounts & Clerk Integration) per that plan.
 
 ## Current Milestone
 
-**Milestone 17 — Daily Data Pipeline & Storage** (not yet started). Milestones 12-16 are complete
-— see progress notes below. The personalization pivot is fully planned in
+**Milestone 17 — Daily Data Pipeline & Storage** (not yet started). Milestones 12, 13, 15, and 16
+are complete. **Milestone 14 is not fully done yet** — the backend and all the mobile screens are
+built, but the end-to-end redirect flow still needs to be tested on a real device, and the name
+field + settings screen are still outstanding (see M14 notes below). Don't treat M14 as closed out
+without that test. The personalization pivot is fully planned in
 `docs/09-personalization-pivot-plan.md`.
 
 ### Milestone 17 — up next
