@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@clerk/expo';
 
@@ -27,6 +27,7 @@ const topics = [
 export default function TopicsScreen() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const router = useRouter();
+  const hasFetchedPreferences = useRef(false);
 
   const [savedPreferences, setSavedPreferences] = 
       useState<UserPreferences | null>(null);
@@ -42,52 +43,60 @@ export default function TopicsScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   
   useEffect(() => {
-    const fetchPreferences = async () => {
-      try {
-        const token = await getToken();
+  if (!isLoaded || !isSignedIn) {
+    return;
+  }
 
-        if (!token) {
-          throw new Error('Your session could not be verified.');
-        }
+  if (hasFetchedPreferences.current) {
+    return;
+  }
 
-        const response = await fetch(
-          `${process.env.EXPO_PUBLIC_API_BASE_URL}/v1/users/me/preferences`,
-          {
-            method: 'GET',
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
+  hasFetchedPreferences.current = true;
 
-        if (response.status === 401) {
-          throw new Error('Your session has expired. Please sign in again.');
-        }
+  const fetchPreferences = async () => {
+    try {
+      const token = await getToken();
 
-        if (!response.ok) {
-          throw new Error('Failed to fetch preferences.');
-        }
-        
-        const data: UserPreferences = await response.json();
-
-        setCategory(data.category);
-        setSelectedTopics(data.additional_topics);
-        setSavedPreferences(data);
-      } catch (error: unknown) {
-        console.error('Error fetching preferences:', error);
-
-        if (error instanceof Error) {
-          setFetchError(error.message);
-        } else {
-          setFetchError('Something went wrong while loading your preferences.');
-        } 
-      } finally {
-        setIsLoading(false);
+      if (!token) {
+        throw new Error('Your session could not be verified.');
       }
-    };
 
-    void fetchPreferences();
-  }, [getToken]);
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_API_BASE_URL}/v1/users/me/preferences`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.status === 401) {
+        throw new Error(
+          'Your session has expired. Please sign in again.'
+        );
+      }
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch preferences.');
+      }
+
+      const data: UserPreferences = await response.json();
+
+      setCategory(data.category);
+      setSelectedTopics(data.additional_topics ?? []);
+      setSavedPreferences(data);
+    } catch (error: unknown) {
+      console.error('Error fetching preferences:', error);
+      setFetchError(getErrorMessage(error));
+      hasFetchedPreferences.current = false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  void fetchPreferences();
+}, [getToken, isLoaded, isSignedIn]);
 
   const handleContinue = async () => {
     if (!category) {
@@ -158,7 +167,7 @@ export default function TopicsScreen() {
   }
 
   return (
-    <View>
+    <ScrollView>
       <Text>Choose additional topics</Text>
 
       <TopicChips
@@ -177,7 +186,7 @@ export default function TopicsScreen() {
           {isSubmitting ? 'Saving...' : 'Continue'}
         </Text>
       </Button>
-    </View>
+    </ScrollView>
   );
 }
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View } from 'react-native';
+import { ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@clerk/expo';
 
@@ -124,7 +124,7 @@ export default function CategorySelectionScreen() {
     }
 
     return(
-        <View>
+        <ScrollView>
             <SelectCard
                 // The full list of categories the user can choose from.
                 options={categories}
@@ -147,6 +147,6 @@ export default function CategorySelectionScreen() {
             >
                 <Text>Continue</Text>
             </Button>
-        </View>
+        </ScrollView>
     );
 }

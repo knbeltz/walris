@@ -1,5 +1,5 @@
 import { useSignIn, useSSO, useAuth  } from '@clerk/expo';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as AuthSession from 'expo-auth-session';
@@ -10,13 +10,19 @@ import { redirectAfterAuth } from '@/lib/redirectAfterAuth'
 import { getErrorMessage } from '@/lib/utils';
 
 export default function SignInScreen() {
-  const { getToken } = useAuth();
+  const { isSignedIn, getToken } = useAuth();
 
   const { signIn, errors, fetchStatus } = useSignIn();
 
   const { startSSOFlow } = useSSO();
 
   const router = useRouter();
+
+  useEffect(() => {
+    if (isSignedIn) {
+      void redirectAfterAuth(getToken, router);
+    }
+  }, [isSignedIn, getToken, router]);
 
   const redirectUrl = AuthSession.makeRedirectUri({
     path: 'sso-callback',
