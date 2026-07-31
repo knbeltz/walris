@@ -70,10 +70,10 @@ is Milestone 13 (User Accounts & Clerk Integration) per that plan.
 ## Current Milestone
 
 **Milestone 17 — Daily Data Pipeline & Storage** (not yet started). Milestones 12, 13, 15, and 16
-are complete. **Milestone 14 is not fully done yet** — the backend and all the mobile screens are
-built, but the end-to-end redirect flow still needs to be tested on a real device, and the name
-field + settings screen are still outstanding (see M14 notes below). Don't treat M14 as closed out
-without that test. The personalization pivot is fully planned in
+are complete. **Milestone 14's core flow is now verified end-to-end on a real device** — sign-up →
+`/category` → `/topics` → `/` all confirmed working against the live database. Two smaller pieces
+of M14 are still outstanding (name field, settings screen — see M14 notes below), but the flow
+itself is no longer blocked. The personalization pivot is fully planned in
 `docs/09-personalization-pivot-plan.md`.
 
 ### Milestone 17 — up next
@@ -106,7 +106,7 @@ fresh coverage (expected). Found and fixed a real bug during verification: Marke
 `fetch_all` (concurrent batch fetch, same semaphore/skip-and-continue pattern as Marketaux).
 Verified end-to-end against the live API: all 39 of 39 indicators fetched successfully.
 
-### Milestone 14 — Category & Topic Selection (mostly complete, 2026-07-26)
+### Milestone 14 — Category & Topic Selection (core flow complete and device-verified, 2026-07-30)
 
 **Done:**
 - `users.category`/`users.additional_topics` columns + migration.
@@ -115,15 +115,31 @@ Verified end-to-end against the live API: all 39 of 39 indicators fetched succes
   custom interactive components in the app beyond button/card/badge/separator/text.
 - `app/(onboarding)/category.tsx` and `topics.tsx` — full onboarding flow: category screen submits
   immediately, topics screen fetches existing preferences first (so it doesn't clobber the saved
-  category), then submits both together.
+  category), then submits both together. Both screens wrapped in `ScrollView` (were plain `View`,
+  clipping the Continue button off-screen).
 - `mobile/lib/redirectAfterAuth.ts` — checks the signed-in user's saved preferences after any
   auth success and routes to `/category` if `category` is still `null`, or `/` otherwise; falls
   back to `/category` on any fetch failure. Wired into all six sign-in/sign-up success paths
   (email/password, Google, Apple, across both screens).
+- `sign-in.tsx`/`sign-up.tsx` now guard against an already-signed-in user re-attempting sign-in
+  (was throwing "You're already signed in" SSO errors) — redirects via `redirectAfterAuth` instead.
+- **Verified end-to-end on a real device**: sign-up → `/category` (pick one) → `/topics` (pick
+  several) → `/`, confirmed against the live database with real `category`/`additional_topics`
+  values persisted.
+
+**Bugs found and fixed during this device-testing pass:**
+- `CLERK_JWKS_URL` in `backend/.env` was pointed at the bare Clerk domain instead of
+  `/.well-known/jwks.json` — meant `ClerkHTTPBearer` had no signing keys to verify against, so
+  *every* authenticated request 403'd regardless of token validity. Fixed.
+- `TopicChips`' original implementation (`Badge` wrapped in an extra `View`, inside `Pressable`)
+  silently never registered taps at all — no visual selection, no console output, nothing.
+  Rebuilt without the `Badge`/nested-`View` layers (styling the `Pressable` directly instead);
+  confirmed working. Root cause was never conclusively isolated (tried: explicit sizing on
+  `Pressable`, removing `flex-wrap`, `role="radio"` vs `"checkbox"`, full Metro cache clear — none
+  of those alone fixed it) — worth keeping in mind if a similar "Pressable wrapping a styled View
+  wrapping Text, inside flex-wrap" pattern silently fails to register touches elsewhere later.
 
 **Still to do for Milestone 14 (not blocking M15-17, but not forgotten):**
-- **End-to-end device test of the whole redirect flow** — sign-up → lands on `/category` →
-  pick a category → lands on `/topics` → pick topics → lands on `/`. Not yet run on a real device.
 - Name field collection (decided earlier to live in this onboarding flow, not via Clerk sign-up
   fields) — not yet added to either screen.
 - Settings screen for changing category/topics later (scoped as part of M14, not built yet).
