@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx
 
+from app.core.config import settings
 from app.schemas.fred_data import FredObservation
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,7 @@ FRED_INDICATORS: list[tuple[str, str]] = [
     ("GASREGW", "Regular Gas Prices"),
 ]
 
+
 def _log_request_error(
     message: str,
     error: httpx.HTTPError,
@@ -81,22 +83,22 @@ def _log_request_error(
         extra=context,
     )
 
+
 async def fetch_fred_observation(
     client: httpx.AsyncClient,
-    api_key: str,
     series_id: str,
     name: str,
 ) -> FredObservation:
     response = await client.get(
-            f"{FRED_BASE_URL}/series/observations",
-            params={
-                "series_id": series_id,
-                "api_key": api_key,
-                "file_type": "json",
-                "sort_order": "desc",
-                "limit": 1,
-            },
-        )
+        f"{FRED_BASE_URL}/series/observations",
+        params={
+            "series_id": series_id,
+            "api_key": settings.fred_api_key,
+            "file_type": "json",
+            "sort_order": "desc",
+            "limit": 1,
+        },
+    )
 
     response.raise_for_status()
 
@@ -104,9 +106,7 @@ async def fetch_fred_observation(
     observations = data.get("observations", [])
 
     if not observations:
-        raise ValueError(
-            f"FRED returned no observations for series {series_id}"
-        )
+        raise ValueError(f"FRED returned no observations for series {series_id}")
 
     latest = observations[0]
 
@@ -121,9 +121,8 @@ async def fetch_fred_observation(
         date=latest["date"],
     )
 
-async def fetch_all(
-        api_key: str,
-) -> list[FredObservation]:
+
+async def fetch_all() -> list[FredObservation]:
     semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
 
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
@@ -136,7 +135,6 @@ async def fetch_all(
                 try:
                     return await fetch_fred_observation(
                         client=client,
-                        api_key=api_key,
                         series_id=series_id,
                         name=name,
                     )
@@ -155,25 +153,12 @@ async def fetch_all(
                         extra={
                             "series_id": series_id,
                             "name": name,
-                        }
+                        },
                     )
                     return None
 
-        tasks = [
-            fetch_one(series_id, name)
-            for series_id, name in FRED_INDICATORS
-        ]
+        tasks = [fetch_one(series_id, name) for series_id, name in FRED_INDICATORS]
 
         results = await asyncio.gather(*tasks)
 
-        return [
-            result
-            for result in results
-            if result is not None
-        ]
-
-
-
-
-
-
+        return [result for result in results if result is not None]

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import date
 from typing import Any
@@ -17,6 +18,8 @@ logger = logging.getLogger(__name__)
 REQUEST_TIMEOUT = 10.0
 
 FMP_BASE_URL = "https://financialmodelingprep.com"
+
+MAX_CONCURRENCY = 10
 
 
 def _log_request_error(
@@ -45,15 +48,9 @@ def _log_request_error(
     )
 
 
-def fetch_market_snapshot(symbols: list[str]) -> list[IndexQuote]:
-    """
-    Fetch and normalize index quotes for the supplied symbols.
-
-    Empty symbols and duplicate symbols are ignored. Symbols are normalized
-    by stripping whitespace and converting them to uppercase.
-
-    Request failures are re-raised. A malformed quote is logged and skipped.
-    """
+async def fetch_market_snapshot(
+    symbols: list[str],
+) -> list[IndexQuote]:
     if not symbols:
         return []
 
@@ -72,65 +69,92 @@ def fetch_market_snapshot(symbols: list[str]) -> list[IndexQuote]:
         seen_symbols.add(normalized_symbol)
         normalized_symbols.append(normalized_symbol)
 
-    index_quotes: list[IndexQuote] = []
     endpoint = f"{FMP_BASE_URL}/stable/quote"
+    semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
 
-    for symbol in normalized_symbols:
-        try:
-            response = httpx.get(
-                endpoint,
-                params={
-                    "symbol": symbol,
-                    "apikey": settings.fmp_api_key,
-                },
-                timeout=REQUEST_TIMEOUT,
-            )
-            response.raise_for_status()
-            raw_response: Any = response.json()
+    async with httpx.AsyncClient(
+        timeout=REQUEST_TIMEOUT,
+    ) as client:
 
-        except httpx.HTTPError as error:
-            _log_request_error(
-                f"Could not fetch quote for {symbol}",
-                error,
-                symbol=symbol,
-            )
-            raise
+        async def fetch_one_quote(
+            symbol: str,
+        ) -> IndexQuote | None:
+            try:
+                async with semaphore:
+                    response = await client.get(
+                        endpoint,
+                        params={
+                            "symbol": symbol,
+                            "apikey": settings.fmp_api_key,
+                        },
+                    )
 
-        if not isinstance(raw_response, list) or not raw_response:
-            logger.warning(
-                "No quote was returned for symbol %s",
-                symbol,
-            )
-            continue
+                response.raise_for_status()
+                raw_response: Any = response.json()
 
-        raw_quote = raw_response[0]
+            except httpx.HTTPError as error:
+                _log_request_error(
+                    f"Could not fetch quote for {symbol}",
+                    error,
+                    symbol=symbol,
+                )
+                raise
 
-        if not isinstance(raw_quote, dict):
-            logger.warning(
-                "Quote for symbol %s was not an object",
-                symbol,
-            )
-            continue
+            if (
+                not isinstance(raw_response, list)
+                or not raw_response
+            ):
+                logger.warning(
+                    "No quote was returned for symbol %s",
+                    symbol,
+                )
+                return None
 
-        try:
-            quote = IndexQuote(
-                symbol=raw_quote["symbol"],
-                name=raw_quote["name"],
-                price=raw_quote["price"],
-                change=raw_quote["change"],
-                change_percentage=raw_quote["changePercentage"],
-            )
-        except (KeyError, TypeError, ValueError, ValidationError) as error:
-            logger.warning(
-                "Quote for symbol %s could not be normalized: %s",
-                symbol,
-                error,
-            )
-            continue
+            raw_quote = raw_response[0]
 
-        index_quotes.append(quote)
+            if not isinstance(raw_quote, dict):
+                logger.warning(
+                    "Quote for symbol %s was not an object",
+                    symbol,
+                )
+                return None
 
-    return index_quotes
+            try:
+                return IndexQuote(
+                    symbol=raw_quote["symbol"],
+                    name=raw_quote["name"],
+                    price=raw_quote["price"],
+                    change=raw_quote["change"],
+                    change_percentage=raw_quote[
+                        "changePercentage"
+                    ],
+                )
+
+            except (
+                KeyError,
+                TypeError,
+                ValueError,
+                ValidationError,
+            ) as error:
+                logger.warning(
+                    "Quote for symbol %s could not be normalized: %s",
+                    symbol,
+                    error,
+                )
+                return None
+
+        tasks = [
+            fetch_one_quote(symbol)
+            for symbol in normalized_symbols
+        ]
+
+        results = await asyncio.gather(*tasks)
+
+    return [
+        result
+        for result in results
+        if result is not None
+    ]
 
 
 def fetch_sector_performance(
@@ -223,29 +247,37 @@ def pick_best_and_worst(
     return best_sector, worst_sector
 
 
-def fetch_top_gainer_spotlight(
+async def fetch_top_gainer_spotlight(
     market_cap_threshold: float,
 ) -> CompanySpotlight | None:
     """
+
     Return the qualifying company with the highest percentage gain.
 
     Return None when no gainer meets the market-cap threshold.
+
     """
+
     if market_cap_threshold < 0:
         raise ValueError("market_cap_threshold cannot be negative.")
 
     gainers_endpoint = f"{FMP_BASE_URL}/stable/biggest-gainers"
 
-    with httpx.Client(timeout=REQUEST_TIMEOUT) as client:
+    profile_endpoint = f"{FMP_BASE_URL}/stable/profile"
+
+    semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
+
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
         try:
-            response = client.get(
+            response = await client.get(
                 gainers_endpoint,
                 params={
                     "apikey": settings.fmp_api_key,
                 },
-                timeout=REQUEST_TIMEOUT,
             )
+
             response.raise_for_status()
+
             raw_gainers: Any = response.json()
 
         except httpx.HTTPError as error:
@@ -253,22 +285,34 @@ def fetch_top_gainer_spotlight(
                 "Could not fetch biggest gainers",
                 error,
             )
+
             raise
 
         if not isinstance(raw_gainers, list):
             logger.warning("Biggest-gainers response was not a list")
+
             return None
 
-        profile_endpoint = f"{FMP_BASE_URL}/stable/profile"
-        qualifying_gainers: list[CompanySpotlight] = []
+        async def process_gainer(
+            raw_gainer: Any,
+        ) -> CompanySpotlight | None:
+            """
 
-        for raw_gainer in raw_gainers:
+            Process one raw gainer record.
+
+            Return a CompanySpotlight when the company qualifies,
+
+            otherwise return None.
+
+            """
+
             if not isinstance(raw_gainer, dict):
                 logger.warning(
                     "Gainer record was not an object: %r",
                     raw_gainer,
                 )
-                continue
+
+                return None
 
             try:
                 symbol = str(raw_gainer["symbol"]).strip().upper()
@@ -282,18 +326,21 @@ def fetch_top_gainer_spotlight(
                     error,
                     raw_gainer,
                 )
-                continue
+
+                return None
 
             try:
-                profile_response = client.get(
-                    profile_endpoint,
-                    params={
-                        "symbol": symbol,
-                        "apikey": settings.fmp_api_key,
-                    },
-                    timeout=REQUEST_TIMEOUT,
-                )
+                async with semaphore:
+                    profile_response = await client.get(
+                        profile_endpoint,
+                        params={
+                            "symbol": symbol,
+                            "apikey": settings.fmp_api_key,
+                        },
+                    )
+
                 profile_response.raise_for_status()
+
                 raw_profiles: Any = profile_response.json()
 
             except httpx.HTTPError as error:
@@ -302,14 +349,16 @@ def fetch_top_gainer_spotlight(
                     error,
                     symbol=symbol,
                 )
-                continue
+
+                return None
 
             if not isinstance(raw_profiles, list) or not raw_profiles:
                 logger.warning(
                     "No profile was returned for symbol %s",
                     symbol,
                 )
-                continue
+
+                return None
 
             raw_profile = raw_profiles[0]
 
@@ -318,15 +367,16 @@ def fetch_top_gainer_spotlight(
                     "Profile for symbol %s was not an object",
                     symbol,
                 )
-                continue
+
+                return None
 
             try:
                 market_cap = float(raw_profile["marketCap"])
 
                 if market_cap < market_cap_threshold:
-                    continue
+                    return None
 
-                spotlight = CompanySpotlight(
+                return CompanySpotlight(
                     symbol=symbol,
                     name=raw_gainer["name"],
                     price=raw_gainer["price"],
@@ -347,9 +397,14 @@ def fetch_top_gainer_spotlight(
                     symbol,
                     error,
                 )
-                continue
 
-            qualifying_gainers.append(spotlight)
+                return None
+
+        tasks = [process_gainer(raw_gainer) for raw_gainer in raw_gainers]
+
+        results = await asyncio.gather(*tasks)
+
+    qualifying_gainers = [result for result in results if result is not None]
 
     if not qualifying_gainers:
         return None
@@ -360,7 +415,7 @@ def fetch_top_gainer_spotlight(
     )
 
 
-def fetch_top_loser_spotlight(
+async def fetch_top_loser_spotlight(
     market_cap_threshold: float,
 ) -> CompanySpotlight | None:
     """
@@ -372,15 +427,17 @@ def fetch_top_loser_spotlight(
         raise ValueError("market_cap_threshold cannot be negative.")
 
     losers_endpoint = f"{FMP_BASE_URL}/stable/biggest-losers"
+    profile_endpoint = f"{FMP_BASE_URL}/stable/profile"
 
-    with httpx.Client(timeout=REQUEST_TIMEOUT) as client:
+    async with httpx.AsyncClient(
+        timeout=REQUEST_TIMEOUT,
+    ) as client:
         try:
-            response = client.get(
+            response = await client.get(
                 losers_endpoint,
                 params={
                     "apikey": settings.fmp_api_key,
                 },
-                timeout=REQUEST_TIMEOUT,
             )
             response.raise_for_status()
             raw_losers: Any = response.json()
@@ -393,22 +450,25 @@ def fetch_top_loser_spotlight(
             raise
 
         if not isinstance(raw_losers, list):
-            logger.warning("Biggest-losers response was not a list")
+            logger.warning(
+                "Biggest-losers response was not a list"
+            )
             return None
 
-        profile_endpoint = f"{FMP_BASE_URL}/stable/profile"
-        qualifying_losers: list[CompanySpotlight] = []
-
-        for raw_loser in raw_losers:
+        async def process_loser(
+            raw_loser: Any,
+        ) -> CompanySpotlight | None:
             if not isinstance(raw_loser, dict):
                 logger.warning(
                     "Loser record was not an object: %r",
                     raw_loser,
                 )
-                continue
+                return None
 
             try:
-                symbol = str(raw_loser["symbol"]).strip().upper()
+                symbol = str(
+                    raw_loser["symbol"]
+                ).strip().upper()
 
                 if not symbol:
                     raise ValueError("Loser symbol is empty.")
@@ -419,16 +479,15 @@ def fetch_top_loser_spotlight(
                     error,
                     raw_loser,
                 )
-                continue
+                return None
 
             try:
-                profile_response = client.get(
+                profile_response = await client.get(
                     profile_endpoint,
                     params={
                         "symbol": symbol,
                         "apikey": settings.fmp_api_key,
                     },
-                    timeout=REQUEST_TIMEOUT,
                 )
                 profile_response.raise_for_status()
                 raw_profiles: Any = profile_response.json()
@@ -439,14 +498,17 @@ def fetch_top_loser_spotlight(
                     error,
                     symbol=symbol,
                 )
-                continue
+                return None
 
-            if not isinstance(raw_profiles, list) or not raw_profiles:
+            if (
+                not isinstance(raw_profiles, list)
+                or not raw_profiles
+            ):
                 logger.warning(
                     "No profile was returned for symbol %s",
                     symbol,
                 )
-                continue
+                return None
 
             raw_profile = raw_profiles[0]
 
@@ -455,20 +517,22 @@ def fetch_top_loser_spotlight(
                     "Profile for symbol %s was not an object",
                     symbol,
                 )
-                continue
+                return None
 
             try:
                 market_cap = float(raw_profile["marketCap"])
 
                 if market_cap < market_cap_threshold:
-                    continue
+                    return None
 
-                spotlight = CompanySpotlight(
+                return CompanySpotlight(
                     symbol=symbol,
                     name=raw_loser["name"],
                     price=raw_loser["price"],
                     change=raw_loser["change"],
-                    change_percentage=raw_loser["changesPercentage"],
+                    change_percentage=raw_loser[
+                        "changesPercentage"
+                    ],
                     market_cap=market_cap,
                     direction="loser",
                 )
@@ -484,9 +548,20 @@ def fetch_top_loser_spotlight(
                     symbol,
                     error,
                 )
-                continue
+                return None
 
-            qualifying_losers.append(spotlight)
+        tasks = [
+            process_loser(raw_loser)
+            for raw_loser in raw_losers
+        ]
+
+        results = await asyncio.gather(*tasks)
+
+    qualifying_losers = [
+        result
+        for result in results
+        if result is not None
+    ]
 
     if not qualifying_losers:
         return None

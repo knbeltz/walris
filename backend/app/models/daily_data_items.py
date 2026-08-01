@@ -1,23 +1,12 @@
 from __future__ import annotations
 
 import uuid
-
 from datetime import date, datetime
-
 from typing import Any
 
-from sqlalchemy import (
-    Date,
-    DateTime,
-    Float,
-    String,
-    UniqueConstraint,
-    func
-)
-
+from sqlalchemy import Date, DateTime, Float, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base, TimestampMixin
 
@@ -30,7 +19,7 @@ class DailyDataItem(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
-        default=uuid.uuid64,
+        default=uuid.uuid4,
     )
 
     item_key: Mapped[str] = mapped_column(
@@ -39,7 +28,7 @@ class DailyDataItem(Base, TimestampMixin):
     )
 
     source: Mapped[str] = mapped_column(
-        String, 
+        String,
         nullable=False,
     )
 
@@ -59,7 +48,5 @@ class DailyDataItem(Base, TimestampMixin):
     )
 
     fetched_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now()
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
