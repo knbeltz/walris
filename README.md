@@ -1,8 +1,10 @@
 # Walris
 
-Walris is a mobile-first economic intelligence app. Every morning it generates a briefing of the
-top five macroeconomic events, explaining what happened, why it matters, how unusual it is
-historically, how financial media is interpreting it, and who is most affected.
+Walris is a mobile-first economic intelligence app. Users sign up, pick one of seven categories
+(Investors, Small Business Owners/Entrepreneurs, Consumers, Home Owners/Home Buyers, Students,
+Job Seekers, or "I Want Everything") plus any additional topics they want, and get an individually
+generated daily briefing explaining what happened in the economy, why it matters, and who's most
+affected — built from FRED, Financial Modeling Prep, and Marketaux data, enriched with AI.
 
 Walris is not a trading app or a news firehose. It's an interpretation layer: a curated, calm,
 editorial-style briefing designed to be read in under five minutes.
@@ -10,14 +12,15 @@ editorial-style briefing designed to be read in under five minutes.
 ## Tech Stack
 
 **Frontend** — React Native, Expo, TypeScript, NativeWind, React Native Reusables, Expo Router,
-TanStack Query, Zod
+TanStack Query, Zod, Clerk (auth)
 
-**Backend** — FastAPI, Python, Pydantic, SQLAlchemy, Alembic
+**Backend** — FastAPI, Python, Pydantic, SQLAlchemy, Alembic, fastapi-clerk-auth
 
 **Database** — Supabase PostgreSQL
 
-**External APIs** — Finnhub (economic calendar), FRED (historical data), Marketaux (news),
-OpenAI (ranking/summaries), Expo Notifications (push)
+**External APIs** — FRED (macroeconomic indicators), Financial Modeling Prep (market data),
+Marketaux (news), OpenAI (personalized briefing generation), Clerk (authentication),
+Expo Notifications (push)
 
 ## Project Structure
 
@@ -40,8 +43,11 @@ Full documentation lives in [`docs/`](docs/):
 - [`06-resume-prompt.md`](docs/06-resume-prompt.md) — current project status, for resuming work
 - [`07-learning-notes.md`](docs/07-learning-notes.md) — concepts and debugging lessons worth remembering (living document)
 - [`08-code-reference-milestones-3-6-9.md`](docs/08-code-reference-milestones-3-6-9.md) — snapshot of the code Claude wrote for Milestones 3/6/9, for study (not a template to copy forward — see the working agreement in `06-resume-prompt.md`)
+- [`09-personalization-pivot-plan.md`](docs/09-personalization-pivot-plan.md) — the personalization pivot plan (per-user categories/topics, Clerk auth, the FRED/FMP/Marketaux/OpenAI data pipeline) and the milestone breakdown that replaced the original roadmap's Milestones 13-24
 
 ## Status
 
-In active development, following the roadmap in `docs/03-development-roadmap.md`. See
-`docs/06-resume-prompt.md` for the current milestone and next steps.
+In active development. Milestones 1-16 are complete (backend foundation, Supabase, CI, user
+accounts via Clerk, category/topic selection, and the FRED/Marketaux fetch services). Milestone 17
+(Daily Data Pipeline & Storage) is in progress. See `docs/06-resume-prompt.md` for the current
+milestone and next steps.
