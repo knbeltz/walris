@@ -2,17 +2,22 @@ from datetime import date
 from typing import Any
 
 from app.schemas.fmp_data import (
-    IndexQuote, 
+    IndexQuote,
     SectorPerformance,
     CompanySpotlight,
-) 
+)
+
+from app.schemas.marketaux_data import MarketauxArticle
+
 from pydantic import BaseModel
+
 
 class DailyDataItemCandidate(BaseModel):
     item_key: str
     source: str
-    value: float
+    value: float | None
     raw_data: dict[str, Any]
+
 
 class FmpFetchResults(BaseModel):
     candidates: list[DailyDataItemCandidate]
@@ -21,3 +26,7 @@ class FmpFetchResults(BaseModel):
     gainer: CompanySpotlight | None
     loser: CompanySpotlight | None
 
+
+class CoveredDailyDataCandidate(BaseModel):
+    candidate: DailyDataItemCandidate
+    articles: list[MarketauxArticle]

@@ -109,13 +109,29 @@ def build_news_search_items(
 
     search_items.extend((quote.symbol, quote.name) for quote in index_quotes)
 
-    search_items.extend((sector.sector, sector.sector) for sector in sector_performance)
+    search_items.extend(
+        (
+            f"sector: {sector.sector}",
+            sector.sector,
+        )
+        for sector in sector_performance
+    )
 
     if gainer is not None:
-        search_items.append((gainer.symbol, gainer.name))
+        search_items.append(
+            (
+                f"company: {gainer.symbol}",
+                gainer.name,
+            )
+        )
 
     if loser is not None:
-        search_items.append((loser.symbol, loser.name))
+        search_items.append(
+            (
+                f"company: {loser.symbol}",
+                loser.name,
+            )
+        )
 
     return search_items
 
