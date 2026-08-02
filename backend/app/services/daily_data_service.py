@@ -22,14 +22,14 @@ from app.core.database import SessionLocal
 from app.models.daily_data_items import DailyDataItem
 from app.models.daily_data_news import DailyDataNews
 
-from app.schemas.daily_data import DailyDataItemCandidate
+from app.schemas.daily_data import DailyDataItemCandidate, FmpFetchResults
 
 
 async def fetch_and_shape_fmp_candidates(
     symbols: list[str],
     as_of: date, 
     market_cap_threshold: float,
-) -> list[DailyDataItemCandidate]:
+) -> FmpFetchResults:
     """
     Fetch FMP data and shape it into DailyDataItem candidates. 
 
@@ -107,4 +107,35 @@ async def fetch_and_shape_fmp_candidates(
             )
         )
 
-    return candidates 
+    return FmpFetchResults(
+        index_quotes=index_quotes, 
+        sector_performances=sector_performances, 
+        gainer=top_gainer, 
+        loser=top_loser, 
+        candidates=candidates 
+    )
+
+async def fetch_and_shape_fred_candidates(
+) -> list[DailyDataItemCandidate]:
+    """
+    Fetch the latest FRED observations and shape them into 
+    DailyDataItemCandidate objects. 
+    """
+
+    fred_observations: list[FredObservation] = (
+        await fetch_fred_observations()
+    )
+
+    return [
+        DailyDataItemCandidate(
+            item_key=observation.series_id,
+            source="fred",
+            value=observation.value,
+            raw_data=observation.model_dump(mode="json"),
+        )
+        for observation in fred_observations
+    ]
+
+async def fetch_and_shape_marketaux_candidates(
+    
+):

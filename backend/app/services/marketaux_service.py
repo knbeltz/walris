@@ -5,6 +5,7 @@ from typing import Any
 
 import httpx
 
+from app.core.config import settings
 from app.schemas.fmp_data import CompanySpotlight, IndexQuote, SectorPerformance
 from app.schemas.marketaux_data import MarketauxArticle
 from app.services.fred_service import FRED_INDICATORS
@@ -16,6 +17,7 @@ REQUEST_TIMEOUT = 10.0
 MARKETAUX_BASE_URL = "https://api.marketaux.com/v1"
 
 MAX_CONCURRENCY = 10
+
 
 def _log_request_error(
     message: str,
@@ -42,11 +44,9 @@ def _log_request_error(
         extra=context,
     )
 
+
 async def fetch_marketaux_articles(
-    client: httpx.AsyncClient,
-    api_key: str,
-    itemkey: str,
-    search_term: str
+    client: httpx.AsyncClient, itemkey: str, search_term: str
 ) -> list[MarketauxArticle]:
     """Fetch up to three recent Marketaux articles for a search term."""
 
@@ -56,12 +56,12 @@ async def fetch_marketaux_articles(
     published_after = datetime.now(UTC) - timedelta(days=1)
 
     response = await client.get(
-        f'{MARKETAUX_BASE_URL}/news/all',
+        f"{MARKETAUX_BASE_URL}/news/all",
         params={
             "search": search_term,
             "published_after": published_after.strftime("%Y-%m-%dT%H:%M:%S"),
             "sort": "published_desc",
-            "api_token": api_key,
+            "api_token": settings.marketaux_api_key,
         },
     )
     response.raise_for_status()
@@ -91,11 +91,12 @@ async def fetch_marketaux_articles(
                 url=raw_article.get("url"),
                 source=raw_article.get("source"),
                 published_at=raw_article.get("published_at"),
-                sentiment=sentiment
+                sentiment=sentiment,
             )
         )
 
     return articles
+
 
 def build_news_search_items(
     index_quotes: list[IndexQuote],
@@ -106,15 +107,9 @@ def build_news_search_items(
     """Combine FRED and FMP results into Marketaux search items."""
     search_items = list(FRED_INDICATORS)
 
-    search_items.extend(
-        (quote.symbol, quote.name)
-        for quote in index_quotes
-    )
+    search_items.extend((quote.symbol, quote.name) for quote in index_quotes)
 
-    search_items.extend(
-        (sector.sector, sector.sector)
-        for sector in sector_performance
-    )
+    search_items.extend((sector.sector, sector.sector) for sector in sector_performance)
 
     if gainer is not None:
         search_items.append((gainer.symbol, gainer.name))
@@ -124,12 +119,12 @@ def build_news_search_items(
 
     return search_items
 
+
 async def fetch_all_articles(
-        api_key: str,
-        index_quotes: list[IndexQuote],
-        sector_performance: list[SectorPerformance],
-        gainer: CompanySpotlight | None,
-        loser: CompanySpotlight | None,
+    index_quotes: list[IndexQuote],
+    sector_performance: list[SectorPerformance],
+    gainer: CompanySpotlight | None,
+    loser: CompanySpotlight | None,
 ) -> list[MarketauxArticle]:
     """Fetch recent Marketaux articles for all FRED and FMP search items."""
 
@@ -151,7 +146,6 @@ async def fetch_all_articles(
                 try:
                     return await fetch_marketaux_articles(
                         client=client,
-                        api_key=api_key,
                         itemkey=itemkey,
                         search_term=search_term,
                     )
@@ -170,22 +164,12 @@ async def fetch_all_articles(
                         extra={
                             "itemkey": itemkey,
                             "search_term": search_term,
-                        }
+                        },
                     )
                     return None
 
-        tasks = [
-            fetch_one(itemkey, search_term)
-            for itemkey, search_term in search_items
-        ]
+        tasks = [fetch_one(itemkey, search_term) for itemkey, search_term in search_items]
 
         results = await asyncio.gather(*tasks)
 
-        return [
-            article
-            for result in results
-            if result is not None
-            for article in result
-        ]
-
-
+        return [article for result in results if result is not None for article in result]
