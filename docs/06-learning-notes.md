@@ -1,6 +1,6 @@
 # Walris Learning Notes
 
-**Document:** docs/07-learning-notes.md
+**Document:** docs/06-learning-notes.md
 **Status:** Living Document
 
 ---

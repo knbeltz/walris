@@ -1,6 +1,6 @@
 # Code Reference — Milestones 3, 6, 9
 
-**Document:** docs/08-code-reference-milestones-3-6-9.md
+**Document:** docs/07-code-reference-milestones-3-6-9.md
 **Status:** Reference document (not living — a snapshot)
 
 ---
@@ -14,8 +14,8 @@ needed real debugging). This document collects that code in one place for refere
 
 **This is a snapshot, not something to copy forward.** Starting Milestone 10, the working
 agreement is: the user writes pseudocode and implementation; Claude handles configuration/tooling
-and reviews. See `docs/06-resume-prompt.md`'s Important Decisions section and
-`docs/07-learning-notes.md` for the concepts behind this code explained with analogies — this
+and reviews. See `docs/05-resume-prompt.md`'s Important Decisions section and
+`docs/06-learning-notes.md` for the concepts behind this code explained with analogies — this
 document is just the code itself, organized by milestone.
 
 ---
@@ -65,7 +65,7 @@ def configure_logging(environment: str) -> None:
 
 Real data modeling: the SQLAlchemy engine/session setup, all 7 table models, and the Alembic
 migration that creates them. This is where the authentication debugging saga happened (see
-`docs/06-resume-prompt.md` and `docs/07-learning-notes.md` for the full story) — the actual root
+`docs/05-resume-prompt.md` and `docs/06-learning-notes.md` for the full story) — the actual root
 cause was in `alembic/env.py`, reusing a separately-built engine instead of the one below.
 
 ### `backend/app/core/database.py`

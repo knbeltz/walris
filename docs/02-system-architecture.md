@@ -15,7 +15,7 @@
 Walris is a mobile-first economic intelligence application that generates a daily briefing
 personalized to each user's selected category (Investors, Small Business Owners/Entrepreneurs,
 Consumers, Home Owners/Home Buyers, Students, Job Seekers, or "I Want Everything") and optional
-additional topics. See `docs/09-personalization-pivot-plan.md` for the full plan.
+additional topics. See `docs/08-personalization-pivot-plan.md` for the full plan.
 
 The system has four major layers:
 
@@ -75,7 +75,7 @@ OpenAI should never be treated as the source of truth.
 Walris V1 **includes** user authentication via Clerk — a deliberate change from this project's
 original plan (which deferred auth to V2). Personalized, per-category briefings require knowing
 who the user is; a local/anonymous preference isn't sufficient once briefings are individually
-generated per account. See `docs/09-personalization-pivot-plan.md` §2 for the full reasoning.
+generated per account. See `docs/08-personalization-pivot-plan.md` §2 for the full reasoning.
 
 ```text
 User installs app
@@ -98,7 +98,7 @@ Users can change their category/topic selections anytime from a settings screen.
 ## 5. Data Flow: Daily Briefing Generation
 
 A scheduled backend job runs every morning. Full detail in
-`docs/09-personalization-pivot-plan.md` §7-9.
+`docs/08-personalization-pivot-plan.md` §7-9.
 
 ```text
 Scheduled job starts
@@ -320,7 +320,7 @@ news_articles
 
 ## 12. Suggested Database Tables
 
-Superseded by the personalization pivot — see `docs/09-personalization-pivot-plan.md` §8 for the
+Superseded by the personalization pivot — see `docs/08-personalization-pivot-plan.md` §8 for the
 authoritative, up-to-date schema design and reasoning. Summary:
 
 ### `users` (new)
@@ -439,7 +439,7 @@ mobile/
 
 ## 14. Frontend Screens
 
-Updated for the personalization pivot — see `docs/09-personalization-pivot-plan.md` §3/§10 for
+Updated for the personalization pivot — see `docs/08-personalization-pivot-plan.md` §3/§10 for
 full detail.
 
 ### Sign-Up / Sign-In Screens (new)
@@ -589,7 +589,7 @@ All external API responses should be normalized before being stored or sent to O
 ## 21. Caching / Retention Strategy
 
 Supabase acts as the primary content cache, but retention is now temporary, not permanent — see
-`docs/09-personalization-pivot-plan.md` §2/§8.
+`docs/08-personalization-pivot-plan.md` §2/§8.
 
 Walris should not call external APIs every time the app opens.
 
@@ -719,7 +719,7 @@ Use a `job_runs` table to track scheduled job health.
 ## 29. V1 Authenticated Architecture (pulled forward from the original V2 plan)
 
 This section originally described V2. Clerk authentication, user profiles, and personalized
-content are now V1 (see §4 and `docs/09-personalization-pivot-plan.md`), because per-category
+content are now V1 (see §4 and `docs/08-personalization-pivot-plan.md`), because per-category
 briefings require knowing who the user is.
 
 ```text

@@ -1,6 +1,6 @@
 # Walris Personalization Pivot — Planning Document
 
-**Document:** docs/09-personalization-pivot-plan.md
+**Document:** docs/08-personalization-pivot-plan.md
 **Status:** Draft — planning reference for the next phase of backend/mobile work
 **Created:** 2026-07-19 · **Revised:** 2026-07-19 (incorporated user's detailed category/indicator plan)
 
@@ -13,7 +13,7 @@ Walris originally planned a single daily briefing built around Finnhub's economi
 explanation). Finnhub's calendar turned out to require a paid plan; Financial Modeling Prep's
 (FMP) equivalent calendar endpoints were also either paid or fully retired. Milestone 12 was
 already rebuilt around FMP's genuinely free market-data endpoints instead (index snapshot, sector
-performance, a market-cap-filtered company spotlight) — see `docs/06-resume-prompt.md` for that
+performance, a market-cap-filtered company spotlight) — see `docs/05-resume-prompt.md` for that
 full story. That work is done and committed.
 
 This document plans the next, larger pivot: instead of one identical briefing for everyone,

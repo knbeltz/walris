@@ -260,7 +260,7 @@ Every morning, Walris generates an individually-tailored briefing for each user,
 Users receive a morning push notification with their briefing. Preferences (category and
 additional topics) can be changed anytime from a settings screen.
 
-See `docs/09-personalization-pivot-plan.md` for the full technical plan behind this.
+See `docs/08-personalization-pivot-plan.md` for the full technical plan behind this.
 
 The MVP succeeds if users consistently return because Walris is the fastest way to understand
 what matters in the economy — for their specific situation — each morning.

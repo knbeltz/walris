@@ -50,7 +50,7 @@ def run_migrations_online() -> None:
     Reuses the same Engine app/core/database.py builds for the rest of the
     app, rather than re-parsing the connection URL from a string a second
     time (that string round-trip was the source of a real, hard-to-diagnose
-    bug — see Milestone 6 notes in docs/06-resume-prompt.md).
+    bug — see Milestone 6 notes in docs/05-resume-prompt.md).
 
     """
     with engine.connect() as connection:

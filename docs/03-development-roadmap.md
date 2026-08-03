@@ -642,7 +642,7 @@ spotlight.
 
 **Replaces the original Milestones 13-24** (which were built around Finnhub's abandoned discrete
 economic-events calendar). Full plan, reasoning, verified FRED series IDs, and category/indicator
-mapping: `docs/09-personalization-pivot-plan.md`. Summary of each milestone below; expand each
+mapping: `docs/08-personalization-pivot-plan.md`. Summary of each milestone below; expand each
 into full Objective/Deliverables/Acceptance-Criteria detail when it's actually started, same
 mentor workflow as every prior milestone.
 
@@ -660,7 +660,7 @@ onboarding screens (new single-select and multi-select UI primitives needed),
 ### Milestone 15 — FRED Service
 
 `services/fred_service.py` — fetch latest values for the 39 verified indicators in
-`docs/09-personalization-pivot-plan.md` §5.
+`docs/08-personalization-pivot-plan.md` §5.
 
 ### Milestone 16 — Marketaux Service
 
@@ -740,7 +740,7 @@ Walris can generate every user's personalized daily briefing without manual inte
 
 ## Core Backend Phase Complete
 
-After Milestone 23 (of the personalization pivot — see `docs/09-personalization-pivot-plan.md`),
+After Milestone 23 (of the personalization pivot — see `docs/08-personalization-pivot-plan.md`),
 Walris will have:
 
 - Supabase schema including user accounts and preferences
@@ -776,7 +776,7 @@ pivot; see those sections below. No outstanding stale-milestone caveats remain i
 individual event detail pages — abandoned along with the rest of the pre-pivot event model).
 Renumbered from 24 to close the gap left by the Part 2 pivot (`docs/03` §"Milestones 13–22", which
 replaced the old 12-milestone event pipeline with 11 milestones, 13-23). Full basis:
-`docs/02-system-architecture.md` §13/14, `docs/09-personalization-pivot-plan.md` §3/§10. Expand
+`docs/02-system-architecture.md` §13/14, `docs/08-personalization-pivot-plan.md` §3/§10. Expand
 each into full Objective/Deliverables/Acceptance-Criteria detail when it's actually started, same
 mentor workflow as every prior milestone.
 

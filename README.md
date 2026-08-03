@@ -39,15 +39,15 @@ Full documentation lives in [`docs/`](docs/):
 - [`02-system-architecture.md`](docs/02-system-architecture.md) — system architecture and data flows
 - [`03-development-roadmap.md`](docs/03-development-roadmap.md) — the milestone-by-milestone build plan
 - [`04-design-system.md`](docs/04-design-system.md) — visual design system and content style
-- [`05-engineering-journal.md`](docs/05-engineering-journal.md) — running engineering journal (living document)
-- [`06-resume-prompt.md`](docs/06-resume-prompt.md) — current project status, for resuming work
-- [`07-learning-notes.md`](docs/07-learning-notes.md) — concepts and debugging lessons worth remembering (living document)
-- [`08-code-reference-milestones-3-6-9.md`](docs/08-code-reference-milestones-3-6-9.md) — snapshot of the code Claude wrote for Milestones 3/6/9, for study (not a template to copy forward — see the working agreement in `06-resume-prompt.md`)
-- [`09-personalization-pivot-plan.md`](docs/09-personalization-pivot-plan.md) — the personalization pivot plan (per-user categories/topics, Clerk auth, the FRED/FMP/Marketaux/OpenAI data pipeline) and the milestone breakdown that replaced the original roadmap's Milestones 13-24
+- [`05-resume-prompt.md`](docs/05-resume-prompt.md) — current project status, for resuming work
+- [`06-learning-notes.md`](docs/06-learning-notes.md) — concepts and debugging lessons worth remembering (living document)
+- [`07-code-reference-milestones-3-6-9.md`](docs/07-code-reference-milestones-3-6-9.md) — snapshot of the code Claude wrote for Milestones 3/6/9, for study (not a template to copy forward — see the working agreement in `05-resume-prompt.md`)
+- [`08-personalization-pivot-plan.md`](docs/08-personalization-pivot-plan.md) — the personalization pivot plan (per-user categories/topics, Clerk auth, the FRED/FMP/Marketaux/OpenAI data pipeline) and the milestone breakdown that replaced the original roadmap's Milestones 13-24
 
 ## Status
 
-In active development. Milestones 1-16 are complete (backend foundation, Supabase, CI, user
-accounts via Clerk, category/topic selection, and the FRED/Marketaux fetch services). Milestone 17
-(Daily Data Pipeline & Storage) is in progress. See `docs/06-resume-prompt.md` for the current
-milestone and next steps.
+In active development. Milestones 1-17 are complete (backend foundation, Supabase, CI, user
+accounts via Clerk, category/topic selection, the FRED/Marketaux fetch services, and a full
+fetch-filter-persist-cleanup pipeline for daily market/news data, verified end-to-end against live
+APIs and the live database). Milestone 18 (Per-User OpenAI Briefing Generation) is next. See
+`docs/05-resume-prompt.md` for the current milestone and next steps.

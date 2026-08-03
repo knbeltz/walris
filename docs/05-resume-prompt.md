@@ -1,6 +1,6 @@
 # Walris Resume Prompt
 
-**Document:** docs/06-resume-prompt.md
+**Document:** docs/05-resume-prompt.md
 **Last Updated:** 2026-08-03 (Milestone 17 — Daily Data Pipeline & Storage — complete and verified
 end-to-end against the live FMP/FRED/Marketaux APIs and the live Supabase database. Milestone 12
 formal sign-off still pending.)
@@ -42,7 +42,7 @@ pending. **Since then, the project has undergone a much bigger pivot**: instead 
 briefing for everyone, Walris now plans a personalized daily briefing — users sign up (Clerk),
 pick one of 7 categories, optionally add extra topics, and get an individually-generated briefing
 built from FRED + FMP + Marketaux + OpenAI. This is fully planned in
-**`docs/09-personalization-pivot-plan.md`** (verified FRED series IDs, database schema, service
+**`docs/08-personalization-pivot-plan.md`** (verified FRED series IDs, database schema, service
 architecture, mobile changes, and a full milestone breakdown) and reflected in `docs/01`, `docs/02`,
 and `docs/03`. **Implementation of this pivot is well underway**: Milestones 13 through 17 are
 complete — user accounts and Clerk auth, category/topic selection, the FRED and Marketaux fetch
@@ -78,7 +78,7 @@ complete. **Milestone 14's core flow is verified end-to-end on a real device** �
 `/category` → `/topics` → `/` all confirmed working against the live database. Two smaller pieces
 of M14 are still outstanding (name field, settings screen — see M14 notes below), but the flow
 itself is no longer blocked. The personalization pivot is fully planned in
-`docs/09-personalization-pivot-plan.md`.
+`docs/08-personalization-pivot-plan.md`.
 
 ### Milestone 17 — Daily Data Pipeline & Storage (complete, 2026-08-03)
 
@@ -914,7 +914,7 @@ Full mentor workflow (Phases 1–7) was followed end to end. Summary for future 
   individually-generated OpenAI briefing built from 39 verified FRED indicators + Milestone 12's
   FMP data + Marketaux news (55 calls/day, one per data field, same-day-recency-filtered). Data is
   temporary (48-hour deletion), not a permanent historical archive. Full plan, reasoning, and
-  milestone breakdown: `docs/09-personalization-pivot-plan.md`. This is reflected in `docs/01`
+  milestone breakdown: `docs/08-personalization-pivot-plan.md`. This is reflected in `docs/01`
   §1/§10/§11, `docs/02` (auth, data flow, database tables, caching, security — extensively
   rewritten), and `docs/03` (Milestones 13-23 fully replaced; Milestones 27+ flagged as needing
   their own re-scoping pass before being started).
@@ -1004,7 +1004,7 @@ Full mentor workflow (Phases 1–7) was followed end to end. Summary for future 
   code is broken — check the TypeScript version VS Code's status bar reports against the
   project's actual installed version.
 - **Explain-in-detail trigger:** whenever a concept referenced in
-  `docs/08-code-reference-milestones-3-6-9.md` comes up again during later work (SQLAlchemy
+  `docs/07-code-reference-milestones-3-6-9.md` comes up again during later work (SQLAlchemy
   models/sessions, Alembic migrations, exception handlers, middleware, response models, UUIDs,
   JSONB, cascade deletes, connection pooling, etc.), explain it in enough detail that the user has
   what they need to actually write the next step themselves — don't assume it's already
