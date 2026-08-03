@@ -1,9 +1,9 @@
 # Walris Resume Prompt
 
 **Document:** docs/06-resume-prompt.md
-**Last Updated:** 2026-07-20 (Milestone 13 backend done and verified — User model, migrations,
-Clerk token verification dependency; mobile Clerk setup not started yet. Milestone 12 formal
-sign-off still pending.)
+**Last Updated:** 2026-08-03 (Milestone 17 — Daily Data Pipeline & Storage — complete and verified
+end-to-end against the live FMP/FRED/Marketaux APIs and the live Supabase database. Milestone 12
+formal sign-off still pending.)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -44,8 +44,12 @@ pick one of 7 categories, optionally add extra topics, and get an individually-g
 built from FRED + FMP + Marketaux + OpenAI. This is fully planned in
 **`docs/09-personalization-pivot-plan.md`** (verified FRED series IDs, database schema, service
 architecture, mobile changes, and a full milestone breakdown) and reflected in `docs/01`, `docs/02`,
-and `docs/03`. **No implementation of this pivot has started yet** — the next actual coding work
-is Milestone 13 (User Accounts & Clerk Integration) per that plan.
+and `docs/03`. **Implementation of this pivot is well underway**: Milestones 13 through 17 are
+complete — user accounts and Clerk auth, category/topic selection, the FRED and Marketaux fetch
+services, and (as of this update) a full fetch-filter-persist-cleanup pipeline that turns those
+services' output into real rows in `daily_data_items`/`daily_data_news`, verified end-to-end
+against live APIs and the live database. The next actual coding work is Milestone 18 (Per-User
+OpenAI Briefing Generation) per that plan.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -69,24 +73,86 @@ is Milestone 13 (User Accounts & Clerk Integration) per that plan.
 
 ## Current Milestone
 
-**Milestone 17 — Daily Data Pipeline & Storage** (not yet started). Milestones 12, 13, 15, and 16
-are complete. **Milestone 14's core flow is now verified end-to-end on a real device** — sign-up →
+**Milestone 18 — Per-User OpenAI Briefing Generation** (not yet started). Milestones 12–17 are all
+complete. **Milestone 14's core flow is verified end-to-end on a real device** — sign-up →
 `/category` → `/topics` → `/` all confirmed working against the live database. Two smaller pieces
 of M14 are still outstanding (name field, settings screen — see M14 notes below), but the flow
 itself is no longer blocked. The personalization pivot is fully planned in
 `docs/09-personalization-pivot-plan.md`.
 
-### Milestone 17 — up next
+### Milestone 17 — Daily Data Pipeline & Storage (complete, 2026-08-03)
 
-Three pieces, per `docs/09` §8:
-1. `daily_data_items`/`daily_data_news` SQLAlchemy models + migration (first real DB storage for
-   FRED/Marketaux data — M15/M16 only fetch and normalize, they don't persist anything yet).
-2. The fetch-and-filter pipeline: FMP fetch → FRED fetch → Marketaux fetch → drop any item with
-   zero fresh news coverage that day, then persist what survives.
-3. The 48-hour deletion mechanism for this temporary data (not a permanent archive).
+All three pieces from `docs/09` §8 are done, and the full chain has been verified end-to-end
+against the live FMP/FRED/Marketaux APIs and the live Supabase database — not just type-checked.
 
-Plan: start with the two DB models/migration, since the pipeline and deletion logic both depend on
-the tables existing first.
+**1. Models + migration.** `backend/app/models/daily_data_items.py` (`DailyDataItem`) and
+`daily_data_news.py` (`DailyDataNews`) — first real DB storage for FRED/FMP/Marketaux data (M15/M16
+only ever fetched and normalized, never persisted). `DailyDataItem` has a `(item_key, date)` unique
+constraint (natural key: a FRED series ID or an FMP field like a symbol/sector); `DailyDataNews` has
+a real `item_id` foreign key to `DailyDataItem.id` with `ondelete="CASCADE"` (a deliberate choice
+over a natural-key match, matching this codebase's existing convention of flat `ForeignKey()`
+columns) plus a `(item_id, url)` unique constraint. Migration `7df1ab8dcf84` applied and verified
+via direct `inspect(engine)` column/constraint/FK checks against the live database, not just "the
+command didn't error." Several real bugs caught in review before this ever ran: a stray-indentation
+syntax error, a missing `Base`/`TimestampMixin` import, `uuid.uuid64` (doesn't exist — `uuid.uuid4`)
+and `mapped.column` (should be `mapped_column`) typos, `item_id` typed as the SQLAlchemy dialect
+`UUID` class instead of Python's `uuid.UUID`, and `sentiment` typed `Mapped[str]` against an actual
+`Float` column — none of these were caught by `mypy` (no SQLAlchemy mypy plugin installed), only by
+review and, in one case, by direct reproduction of the resulting Pydantic `ValidationError`.
+
+**2. The fetch-filter-persist pipeline**, all in new `backend/app/services/daily_data_service.py`
+(and a new `backend/app/schemas/daily_data.py` for the intermediate shapes):
+- `fetch_and_shape_fmp_candidates` / `fetch_and_shape_fred_candidates` /
+  `fetch_and_shape_marketaux_candidates` — fetch and normalize each provider's data into
+  `DailyDataItemCandidate`/`FmpFetchResults` schemas (both new). Required converting
+  `fmp_service.py`'s `fetch_market_snapshot`, `fetch_top_gainer_spotlight`, and
+  `fetch_top_loser_spotlight` to `async def` (concurrent profile lookups, same pattern as the
+  already-async gainer function), and switching `fred_service.py`/`marketaux_service.py` to read
+  their API keys from `settings` directly instead of taking them as parameters.
+- `filter_candidates_by_news_coverage` — combines FMP + FRED candidates, drops any with zero
+  matching Marketaux articles, pairs survivors with their articles (`CoveredDailyDataCandidate`,
+  a named schema chosen deliberately over a bare tuple, since two of the bundled fields —
+  `gainer`/`loser` on `FmpFetchResults` — share the same type and a positional swap would be a
+  silent, `mypy`-invisible bug).
+- `fetch_covered_daily_data_candidates` — the orchestrator tying the above together.
+- `saved_covered_daily_data_candidates` — persists survivors into `DailyDataItem`/`DailyDataNews`,
+  **skip-if-exists** on the `(item_key, date)`/`(item_id, url)` natural keys (chosen over upsert or
+  let-it-fail: a retry always completes and leaves a correct, complete row set, rather than
+  potentially dying partway through or silently overwriting).
+- **A real bug found in `marketaux_service.py`'s `build_news_search_items`, not part of this
+  milestone's own new code**: sector/company search items used the bare `sector.sector`/
+  `gainer.symbol` as their Marketaux item_key, which would never have matched the
+  `"sector: {name}"`/`"company: {symbol}"` prefixed item_keys the new candidates use — every
+  sector and company candidate would have silently failed the coverage filter. Found and fixed
+  during this milestone.
+- **A real bug in the persistence function found in review**: `resolved_item_ids.append(...)` and
+  the entire per-article `DailyDataNews` loop were indented one level too shallow — valid Python,
+  so nothing errored, but they silently ran only once (using whatever candidate was left over from
+  the last loop iteration) instead of once per candidate. Every `DailyDataItem` was still being
+  created/resolved correctly, but only the *last* candidate's articles were ever being persisted.
+  Caught by review, not by any tool.
+- **Design decision, deliberately accepted as a known risk**: `marketaux_service.py` still searches
+  news for all 11 sectors even though only the best/worst two are ever persisted as items (kept
+  because Marketaux's 100/day cap has comfortable headroom either way — 46 vs. 55 of 100 — so
+  narrowing wasn't worth the added complexity). Separately: a full-pipeline retry-from-scratch on a
+  day that already used most of the daily Marketaux quota could theoretically push past 100/day —
+  explicitly accepted as an unlikely edge case to revisit later rather than solve now.
+
+**3. The 48-hour cleanup**, `delete_stale_daily_data()` in the same file — a single bulk `DELETE`
+against `DailyDataItem` where `fetched_at` is older than `STALE_DATA_HOURS` (48); `DailyDataNews`
+cleanup needs no separate query at all, since it happens automatically via the `ON DELETE CASCADE`
+FK. One typing-only issue fixed: `Session.execute()`'s declared return type (`Result[Any]`) doesn't
+include `.rowcount`, even though the `CursorResult` it actually returns for a DML statement does —
+resolved with `typing.cast("CursorResult[Any]", ...)` rather than any change in actual behavior.
+
+**End-to-end verification, run live against real APIs and the real database:** 40 of 46 possible
+candidates (39 FRED + 3 index quotes + 2 picked sectors + gainer + loser) survived the coverage
+filter; 40 `DailyDataItem` and 113 `DailyDataNews` rows landed in Supabase, confirmed by direct
+query. Skip-if-exists proven by running the exact same persist call twice — identical IDs both
+times, row counts unchanged. Cascade delete proven by backdating one real persisted row to 49 hours
+old, running `delete_stale_daily_data()`, and confirming: exactly 1 row reported deleted, that row
+gone, its 3 linked `DailyDataNews` rows also gone with no orphans, and the remaining item count
+correctly dropped by exactly one.
 
 ### Milestone 16 — Marketaux Service (complete, 2026-07-29)
 

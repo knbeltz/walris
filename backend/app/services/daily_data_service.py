@@ -1,13 +1,24 @@
-import logging
 import asyncio
-
+import logging
+from datetime import UTC, date, datetime, timedelta
+from typing import Any, cast
 from uuid import UUID
 
-from datetime import datetime, date
-
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.core.database import SessionLocal
+from app.models.daily_data_items import DailyDataItem
+from app.models.daily_data_news import DailyDataNews
+from app.schemas.daily_data import (
+    CoveredDailyDataCandidate,
+    DailyDataItemCandidate,
+    FmpFetchResults,
+)
+from app.schemas.fmp_data import CompanySpotlight, IndexQuote, SectorPerformance
+from app.schemas.fred_data import FredObservation
+from app.schemas.marketaux_data import MarketauxArticle
 from app.services.fmp_service import (
     fetch_market_snapshot,
     fetch_sector_performance,
@@ -18,20 +29,9 @@ from app.services.fmp_service import (
 from app.services.fred_service import fetch_all as fetch_fred_observations
 from app.services.marketaux_service import fetch_all_articles
 
-from app.schemas.fmp_data import CompanySpotlight, IndexQuote, SectorPerformance
-from app.schemas.fred_data import FredObservation
-from app.schemas.marketaux_data import MarketauxArticle
+logger = logging.getLogger(__name__)
 
-from app.core.database import SessionLocal
-
-from app.models.daily_data_items import DailyDataItem
-from app.models.daily_data_news import DailyDataNews
-
-from app.schemas.daily_data import (
-    DailyDataItemCandidate,
-    FmpFetchResults,
-    CoveredDailyDataCandidate,
-)
+STALE_DATA_HOURS = 48
 
 
 async def fetch_and_shape_fmp_candidates(
@@ -269,7 +269,7 @@ def saved_covered_daily_data_candidates(
                 session.add(daily_data_item)
 
                 """
-                Sends the INSERT to the database without committing the 
+                Sends the INSERT to the database without committing the
                 transaction, allowing SQLAlchemy to populate the item's ID.
                 """
 
@@ -307,6 +307,47 @@ def saved_covered_daily_data_candidates(
 
     except SQLAlchemyError:
         session.rollback()
+        raise
+
+    finally:
+        session.close()
+
+
+def delete_stale_daily_data() -> int:
+    """
+    Delete DailyDataItem rows fetched more than 48 hours ago.
+
+    Related DailyDataNews rows are deleted automatically by PostgreSQL
+    because DailyDataNews.item_id uses ON DELETE CASCADE.
+
+    Returns the number of DailyDataItem rows deleted.
+    """
+
+    cutoff = datetime.now(UTC) - timedelta(hours=STALE_DATA_HOURS)
+
+    session = SessionLocal()
+
+    try:
+        result = cast(
+            "CursorResult[Any]",
+            session.execute(delete(DailyDataItem).where(DailyDataItem.fetched_at < cutoff)),
+        )
+
+        session.commit()
+
+        deleted_count = result.rowcount or 0
+
+        logger.info(
+            "Deleted %s stale DailyDataItem rows older than %s",
+            deleted_count,
+            cutoff,
+        )
+
+        return deleted_count
+
+    except SQLAlchemyError:
+        session.rollback()
+        logger.exception("Failed to delete stale daily data")
         raise
 
     finally:
