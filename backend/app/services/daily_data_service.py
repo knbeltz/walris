@@ -1,7 +1,12 @@
 import logging
 import asyncio
 
+from uuid import UUID
+
 from datetime import datetime, date
+
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.services.fmp_service import (
     fetch_market_snapshot,
@@ -218,3 +223,91 @@ async def fetch_covered_daily_data_candidates(
         fred_candidates=fred_candidates,
         marketaux_articles=marketaux_articles,
     )
+
+
+def saved_covered_daily_data_candidates(
+    covered_candidates: list[CoveredDailyDataCandidate],
+    as_of: date,
+) -> list[UUID]:
+    """
+    Persist covered daily-data candidates and their associated news articles.
+
+    Existing DailyDataItem rows are reused when their item_key and date match.
+    Existing DailyDataNews rows are reused when their item_id and URL match.
+
+    The full batch is committed in one transaction. If any operation fails,
+    the entire transaction is rolled back.
+
+    Returns the IDs of the resolved DailyDataItem rows.
+    """
+
+    session = SessionLocal()
+    resolved_item_ids: list[UUID] = []
+
+    try:
+        for covered_candidate in covered_candidates:
+            candidate = covered_candidate.candidate
+
+            existing_item = session.scalar(
+                select(DailyDataItem).where(
+                    DailyDataItem.item_key == candidate.item_key,
+                    DailyDataItem.date == as_of,
+                )
+            )
+
+            if existing_item is not None:
+                daily_data_item = existing_item
+            else:
+                daily_data_item = DailyDataItem(
+                    item_key=candidate.item_key,
+                    source=candidate.source,
+                    date=as_of,
+                    value=candidate.value,
+                    raw_data=candidate.raw_data,
+                )
+
+                session.add(daily_data_item)
+
+                """
+                Sends the INSERT to the database without committing the 
+                transaction, allowing SQLAlchemy to populate the item's ID.
+                """
+
+                session.flush()
+
+            resolved_item_ids.append(daily_data_item.id)
+
+            for article in covered_candidate.articles:
+                existing_news = session.scalar(
+                    select(DailyDataNews).where(
+                        DailyDataNews.item_id == daily_data_item.id,
+                        DailyDataNews.url == article.url,
+                    )
+                )
+
+                if existing_news is not None:
+                    continue
+
+                daily_data_news = DailyDataNews(
+                    item_id=daily_data_item.id,
+                    date=as_of,
+                    headline=article.headline,
+                    source=article.source,
+                    url=article.url,
+                    published_at=article.published_at,
+                    summary=article.summary,
+                    sentiment=article.sentiment,
+                )
+
+                session.add(daily_data_news)
+
+        session.commit()
+
+        return resolved_item_ids
+
+    except SQLAlchemyError:
+        session.rollback()
+        raise
+
+    finally:
+        session.close()
