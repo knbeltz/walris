@@ -24,7 +24,6 @@ from app.services.fmp_service import (
     fetch_sector_performance,
     fetch_top_gainer_spotlight,
     fetch_top_loser_spotlight,
-    pick_best_and_worst,
 )
 from app.services.fred_service import fetch_all as fetch_fred_observations
 from app.services.marketaux_service import fetch_all_articles
@@ -33,9 +32,18 @@ logger = logging.getLogger(__name__)
 
 STALE_DATA_HOURS = 48
 
+SP_500_SYMBOL = "^GSPC"
+DOW_JONES_SYMBOL = "^DJI"
+NASDAQ_COMPOSITE_SYMBOL = "^IXIC"
+
+MARKET_INDEX_SYMBOLS: tuple[str, ...] = (
+    SP_500_SYMBOL,
+    DOW_JONES_SYMBOL,
+    NASDAQ_COMPOSITE_SYMBOL,
+)
+
 
 async def fetch_and_shape_fmp_candidates(
-    symbols: list[str],
     as_of: date,
     market_cap_threshold: float,
 ) -> FmpFetchResults:
@@ -44,16 +52,16 @@ async def fetch_and_shape_fmp_candidates(
 
     Includes:
     - One candidate for each successfully fetched market index
-    - The best-performing sector
-    - The worst-performing sector
+    - One candidate for each of the 11 sector performances
     - The top qualifying gainer, when one exists
     - The top qualifying loser, when one exists
     """
 
-    index_quotes = await fetch_market_snapshot(symbols)
+    index_quotes = await fetch_market_snapshot(
+        list(MARKET_INDEX_SYMBOLS)
+    )
 
     sector_performances = fetch_sector_performance(as_of)
-    best_sector, worst_sector = pick_best_and_worst(sector_performances)
 
     top_gainer, top_loser = await asyncio.gather(
         fetch_top_gainer_spotlight(market_cap_threshold),
@@ -73,20 +81,13 @@ async def fetch_and_shape_fmp_candidates(
     )
 
     candidates.extend(
-        [
-            DailyDataItemCandidate(
-                item_key=f"sector: {best_sector.sector}",
-                source="fmp",
-                value=best_sector.average_change,
-                raw_data=best_sector.model_dump(mode="json"),
-            ),
-            DailyDataItemCandidate(
-                item_key=f"sector: {worst_sector.sector}",
-                source="fmp",
-                value=worst_sector.average_change,
-                raw_data=worst_sector.model_dump(mode="json"),
-            ),
-        ]
+        DailyDataItemCandidate(
+            item_key=f"sector: {sector.sector}",
+            source="fmp",
+            value=sector.average_change,
+            raw_data=sector.model_dump(mode="json"),
+        )
+        for sector in sector_performances
     )
 
     if top_gainer is not None:
@@ -194,7 +195,6 @@ def filter_candidates_by_news_coverage(
 
 
 async def fetch_covered_daily_data_candidates(
-    symbols: list[str],
     as_of: date,
     market_cap_threshold: float,
 ) -> list[CoveredDailyDataCandidate]:
@@ -204,7 +204,6 @@ async def fetch_covered_daily_data_candidates(
     """
     fmp_results, fred_candidates = await asyncio.gather(
         fetch_and_shape_fmp_candidates(
-            symbols=symbols,
             as_of=as_of,
             market_cap_threshold=market_cap_threshold,
         ),
