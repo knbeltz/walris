@@ -18,6 +18,7 @@ const topics = [
     {value: 'employment_labor', label: 'Employment and Labor'},
     {value: 'economic_growth', label: 'Economic Growth'},
     {value: 'housing', label: 'Housing'},
+    {value: 'interest_rates_monetary_policy', label: 'Interest Rates & Monetary Policy'},
     {value: 'consumer_cost', label: 'Consumer Costs'},
     {value: 'major_market_indicies', label: 'Major Market Indicies'},
     {value: 'industry_sector_performance', label: 'Industry Sector Performance'},

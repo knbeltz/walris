@@ -6,3 +6,4 @@ alembic
 psycopg[binary]
 httpx
 fastapi-clerk-auth
+openai
