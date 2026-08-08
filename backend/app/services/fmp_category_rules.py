@@ -10,6 +10,14 @@
 # codebase yet. All of that needs its own logic, layered on top of these
 # two tables rather than folded into them.
 
+from dataclasses import dataclass, field
+
+from app.services.daily_data_service import (
+    MARKET_INDEX_SYMBOLS,
+    NASDAQ_COMPOSITE_SYMBOL,
+    SP_500_SYMBOL,
+)
+
 CATEGORY_ITEM_KEYS: dict[str, set[str]] = {
     "investor": {
         # Inflation (1-5)
@@ -251,4 +259,77 @@ TOPIC_ITEM_KEYS: dict[str, set[str]] = {
         "GASREGW",
         "TERMCBCCALLNS",
     },
+}
+
+
+@dataclass(frozen=True, slots=True)
+class MarketContentRules:
+    wants_all_sectors: bool = False
+    wants_best_worst_sector: bool = False
+    named_sectors: frozenset[str] = field(default_factory=frozenset)
+    wants_company_spotlight: bool = False
+    index_symbols: frozenset[str] = field(
+        default_factory=frozenset,
+    )
+
+
+CATEGORY_MARKET_CONTENT: dict[str, MarketContentRules] = {
+    "investor": MarketContentRules(
+        wants_all_sectors=True,
+        wants_company_spotlight=True,
+        index_symbols=frozenset(MARKET_INDEX_SYMBOLS),
+    ),
+    "small_business_owner": MarketContentRules(
+        wants_best_worst_sector=True,
+        index_symbols=frozenset(
+            {
+                SP_500_SYMBOL,
+            }
+        ),
+    ),
+    "consumer": MarketContentRules(),
+    "home": MarketContentRules(
+        named_sectors=frozenset(
+            {
+                "Real Estate",
+                "Financial Services",
+                "Consumer Cyclical",
+            }
+        ),
+        index_symbols=frozenset(
+            {
+                SP_500_SYMBOL,
+            }
+        ),
+    ),
+    "student": MarketContentRules(
+        wants_best_worst_sector=True,
+        index_symbols=frozenset(
+            {
+                SP_500_SYMBOL,
+                NASDAQ_COMPOSITE_SYMBOL,
+            }
+        ),
+    ),
+    "job_seeker": MarketContentRules(
+        wants_best_worst_sector=True,
+        index_symbols=frozenset(MARKET_INDEX_SYMBOLS),
+    ),
+    "everything": MarketContentRules(
+        wants_all_sectors=True,
+        wants_company_spotlight=True,
+        index_symbols=frozenset(MARKET_INDEX_SYMBOLS),
+    ),
+}
+
+TOPIC_MARKET_CONTENT: dict[str, MarketContentRules] = {
+    "industry_sector_performance": MarketContentRules(
+        wants_all_sectors=True,
+    ),
+    "company_spotlights": MarketContentRules(
+        wants_company_spotlight=True,
+    ),
+    "major_market_indicies": MarketContentRules(
+        index_symbols=frozenset(MARKET_INDEX_SYMBOLS),
+    ),
 }
