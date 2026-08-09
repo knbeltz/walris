@@ -46,8 +46,9 @@ Full documentation lives in [`docs/`](docs/):
 
 ## Status
 
-In active development. Milestones 1-17 are complete (backend foundation, Supabase, CI, user
-accounts via Clerk, category/topic selection, the FRED/Marketaux fetch services, and a full
-fetch-filter-persist-cleanup pipeline for daily market/news data, verified end-to-end against live
-APIs and the live database). Milestone 18 (Per-User OpenAI Briefing Generation) is next. See
-`docs/05-resume-prompt.md` for the current milestone and next steps.
+In active development. Milestones 1-18 are complete (backend foundation, Supabase, CI, user
+accounts via Clerk, category/topic selection, the FRED/Marketaux fetch services, a full
+fetch-filter-persist-cleanup pipeline for daily market/news data, and per-user OpenAI briefing
+generation, verified end-to-end against live APIs, the live OpenAI API, and the live database).
+Milestone 19 (Daily Briefing Orchestrator) is next. See `docs/05-resume-prompt.md` for the current
+milestone and next steps.

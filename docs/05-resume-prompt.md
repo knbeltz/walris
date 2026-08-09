@@ -1,9 +1,9 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-08-03 (Milestone 17 — Daily Data Pipeline & Storage — complete and verified
-end-to-end against the live FMP/FRED/Marketaux APIs and the live Supabase database. Milestone 12
-formal sign-off still pending.)
+**Last Updated:** 2026-08-09 (Milestone 18 — Per-User OpenAI Briefing Generation — complete and
+verified end-to-end against the live OpenAI API, live FMP/FRED/Marketaux APIs, and the live
+Supabase database. Milestone 12's long-pending formal sign-off is also closed out below.)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -44,12 +44,17 @@ pick one of 7 categories, optionally add extra topics, and get an individually-g
 built from FRED + FMP + Marketaux + OpenAI. This is fully planned in
 **`docs/08-personalization-pivot-plan.md`** (verified FRED series IDs, database schema, service
 architecture, mobile changes, and a full milestone breakdown) and reflected in `docs/01`, `docs/02`,
-and `docs/03`. **Implementation of this pivot is well underway**: Milestones 13 through 17 are
+and `docs/03`. **Implementation of this pivot is well underway**: Milestones 13 through 18 are
 complete — user accounts and Clerk auth, category/topic selection, the FRED and Marketaux fetch
-services, and (as of this update) a full fetch-filter-persist-cleanup pipeline that turns those
-services' output into real rows in `daily_data_items`/`daily_data_news`, verified end-to-end
-against live APIs and the live database. The next actual coding work is Milestone 18 (Per-User
-OpenAI Briefing Generation) per that plan.
+services, a full fetch-filter-persist-cleanup pipeline that turns those services' output into real
+rows in `daily_data_items`/`daily_data_news`, and (as of this update) per-user OpenAI briefing
+generation — a user's category/topics get resolved into relevant FRED/FMP data, formatted into a
+prompt, and sent to `gpt-5-nano` to produce a structured `BriefingContent` (headline + themed
+sections), persisted one row per user per day in the new `user_briefings` table. Verified
+end-to-end against the live OpenAI API (not just type-checked), including the quiet-day fallback
+path (no relevant data → no API call, just a static message) and the per-user loop's
+skip-if-exists behavior. The next actual coding work is Milestone 19 (Daily Briefing Orchestrator)
+per that plan.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -67,22 +72,169 @@ OpenAI Briefing Generation) per that plan.
 - [x] **Milestone 9 — API Foundation**
 - [x] **Milestone 10 — First End-to-End Connection**
 - [x] **Milestone 11 — Database Models & Migrations**
-- [ ] Milestones 12–26 — Core Backend (Part 2)
+- [x] **Milestone 12 — FMP Market Data Service** (redesigned from the roadmap's original Finnhub
+  scope — see the pivot story below; formal sign-off closed out 2026-08-09, long after the code
+  itself was done)
+- [x] **Milestone 13 — User Accounts & Clerk Integration**
+- [x] **Milestone 14 — Category & Topic Selection** (core flow complete and device-verified; two
+  small pieces still outstanding — see notes below)
+- [x] **Milestone 15 — FRED Service**
+- [x] **Milestone 16 — Marketaux Service**
+- [x] **Milestone 17 — Daily Data Pipeline & Storage**
+- [x] **Milestone 18 — Per-User OpenAI Briefing Generation**
+- [ ] Milestones 19–26 — Core Backend (Part 2, remainder)
 - [ ] Milestones 27–40 — Mobile App (Part 3)
 - [ ] Milestones 41–56 — Notifications, QA, Deployment & Launch (Part 4)
 
 ## Current Milestone
 
-**Milestone 18 — Per-User OpenAI Briefing Generation** (not yet started). Milestones 12–17 are all
+**Milestone 19 — Daily Briefing Orchestrator** (not yet started). Milestones 12–18 are all
 complete. **Milestone 14's core flow is verified end-to-end on a real device** — sign-up →
 `/category` → `/topics` → `/` all confirmed working against the live database. Two smaller pieces
 of M14 are still outstanding (name field, settings screen — see M14 notes below), but the flow
 itself is no longer blocked. The personalization pivot is fully planned in
 `docs/08-personalization-pivot-plan.md`.
 
+### Milestone 18 — Per-User OpenAI Briefing Generation (complete, 2026-08-09)
+
+Per `docs/08` §9/§12, this milestone's job was `openai_service.py`, the `user_briefings` table +
+migration, and the per-user generation loop — turning M13-17's per-user preferences and shared
+daily data into one personalized `BriefingContent` per registered user per day.
+
+**1. FRED/FMP relevance tables.** `backend/app/services/fmp_category_rules.py` (renamed from
+`category_config.py` once it grew to hold FMP content too) — `CATEGORY_ITEM_KEYS`/
+`TOPIC_ITEM_KEYS` (FRED series IDs per category/topic, transcribed from `docs/08` §5/§6 and
+cross-checked programmatically against the real 39-series master list — all 39 accounted for, no
+typos) and `MarketContentRules`/`CATEGORY_MARKET_CONTENT`/`TOPIC_MARKET_CONTENT` (FMP index/
+sector/company rules per category/topic). A 9th additional-topic, `interest_rates_monetary_policy`,
+was added to `mobile/app/(onboarding)/topics.tsx` — `docs/08` §5 tags FRED items 22-29 as their own
+topic group, but the 8 topics originally implemented never exposed it. Home Owners' named-sector
+filter (`"Real Estate"`, `"Financial Services"`, `"Consumer Cyclical"`) was verified against a live
+call to FMP's sector-performance-snapshot endpoint, not assumed from the plan doc's looser wording
+("Consumer Discretionary") — confirmed FMP's actual naming already matched what had been written.
+
+**2. A real M17 pipeline fix, discovered as a blocker while building the tables above.**
+`docs/08` §6 says Investors/"I Want Everything" should see all 11 sector performances, but M17's
+`fetch_and_shape_fmp_candidates` only ever built candidates for the best and worst sector — the
+other 9 were fetched from FMP but never turned into persisted `DailyDataItem` candidates at all.
+Fixed by looping over the full `sector_performances` list instead of calling `pick_best_and_worst`
+at fetch time; that computation now belongs to M18's own filtering logic instead (per-category, at
+generation time, against the 11 persisted rows), since M17's job is raw collection, not deciding
+which sectors matter to which user. Re-verified live afterward (see §6 below).
+
+**3. Legacy table cleanup.** `Briefing`, `EconomicEvent`, `EnrichedEvent`, `FredSeries`, and
+`NewsArticle` — the entire pre-personalization-pivot schema, superseded by `daily_data_items`/
+`daily_data_news`/`user_briefings` but never actually removed — were still live tables in
+Supabase and still registered in `app/models/__init__.py`. Deleted all five model files, generated
+the drop migration, and caught a real autogenerate bug before applying it: the generated
+`upgrade()`/`downgrade()` dropped/recreated tables in the wrong order relative to their own FK
+dependency chain (`briefings ← economic_events ← {enriched_events, fred_series, news_articles}`),
+which would have failed against Postgres's referential-integrity checks. Reordered by hand,
+verified both an empty-table check (all 5 had 0 rows — safe to drop) and the post-migration live
+schema (`inspect(engine)` — all 5 gone, nothing else touched).
+
+**4. `user_briefings` table.** `backend/app/models/user_briefings.py` (`UserBriefing`) — `id`,
+`user_id` (FK → `users.id`, `CASCADE`), `date`, `content` (JSONB), `fetched_at`, plus a
+`(user_id, date)` unique constraint enabling skip-if-exists. Migration applied and verified live
+(columns, FK, constraint, index all confirmed via direct `inspect(engine)` calls). Renamed from an
+initial `DailyBriefing`/`daily_briefings` for consistency with the plan doc's own naming.
+
+**5. `app/schemas/user_briefing.py`** — `BriefingContent` (`headline` + `sections`) and
+`BriefingSection` (`heading` + `body`), the structured-output schema requested from OpenAI.
+Verified to round-trip cleanly through `model_dump(mode="json")` → dict → `model_validate`, the
+exact path it takes into and out of `UserBriefing.content`'s JSONB column.
+
+**6. `app/services/prompt_services.py`** — `CATEGORY_MAIN_QUESTIONS` (the 7 categories' framing
+questions from `docs/08` §6, not previously in code) and `build_developer_message`, generating the
+system/developer message per category. `build_user_message` turns a user's filtered
+`DailyDataItemWithNews` list into the actual data text sent to the model, branching per item shape
+(FRED's flat `{name, value}`, FMP index/sector/company's differently-shaped `raw_data`) and
+attaching each item's real news headlines/summaries. `build_quiet_day_briefing` is the static
+fallback (`headline="Nothing notable to report today.", sections=[]`) used when a user's filtered
+dataset is empty — deliberately returns a fresh instance per call, not a shared module constant,
+since `BriefingContent` is a mutable Pydantic model. `DailyDataItemWithNews` itself lives here
+(not in `openai_service.py`, where it was first written) specifically to keep the import direction
+one-way once `openai_service.py` needed to call back into this module for the actual API call.
+
+**7. `backend/app/services/openai_service.py`** — the full pipeline:
+- `get_user_daily_data_with_news(user, as_of)` — resolves a user's category + topics into relevant
+  FRED/FMP `DailyDataItem` rows for the day and attaches each one's linked news. Verified live
+  against a real user (category `student`, all 3 FMP topics): 20 relevant items, 57 attached
+  articles.
+- `generate_briefing_content(user, as_of)` — the actual OpenAI call. Short-circuits to
+  `build_quiet_day_briefing()` before ever building a prompt if the filtered dataset is empty (no
+  API cost for quiet days — verified live: a date with no persisted data produced the fallback
+  with zero network calls), and again if `response.output_parsed` comes back `None` (a real
+  possible outcome per the SDK's own types, not assumed impossible). Uses `gpt-5-nano` — confirmed
+  against OpenAI's own live docs as the cheapest current model by both input/output price, not
+  taken from unreliable pricing-aggregator sites that surfaced inconsistent model names on the
+  first attempt.
+- `generate_and_persist_all_briefings(as_of)` — the per-user loop. Queries users with a set
+  `category` (users who haven't finished onboarding are skipped rather than getting a confusing
+  daily "nothing to report" push), filters out anyone already having a `UserBriefing` for the day
+  in one batched query (not N individual ones), then runs the rest concurrently
+  (`asyncio.Semaphore`-bounded, matching `fred_service.py`/`marketaux_service.py`'s existing
+  pattern) with per-user failure isolation via `openai.OpenAIError` so one user's API failure can't
+  take down the batch.
+
+**Real bugs found and fixed, mostly through review rather than tooling** — this milestone had an
+unusually high count, several repeating the same shape:
+- The `backend.app.services.X` import-path typo (an extra, incorrect `backend.` prefix) recurred
+  twice across two different files during the session.
+- Three separate instances of a `return` statement (or, in one case, a whole conditional branch)
+  sitting one indentation level too deep, inside a loop or an `if`/`else` block instead of after
+  it — `filter_fmp_items_by_rules` (silently dropped every candidate but the first sector match and
+  skipped company spotlights entirely for `wants_all_sectors` categories), `build_user_message`
+  (returned after the first of 20 items instead of all of them), and `generate_briefing_content`
+  (the quiet-day check never actually short-circuited the API call). Caught each time by tracing
+  control flow by hand and then proving it with a live call, not by trusting that "it didn't error."
+- A `list`/`set` type mismatch (`relevant_items: list[...] = set()`) combined with mixed
+  `.extend()`/`.add()`/`.update()` calls on the same variable — real, `mypy`-confirmed, would have
+  crashed on the very first item processed.
+- A trailing comma inside a frozen dataclass's field defaults (`wants_all_sectors: bool = False,`)
+  silently turning the default into a 1-tuple — Python-truthy, so it would have inverted the
+  intended "Consumers get no market content by default" design without ever raising an error.
+- `rules.named_secotrs` (typo) and a loop variable shadowing its own function's list parameter
+  (`for item_with_news in item_with_news:`) — the latter didn't break at runtime (the `for`
+  statement captures its iterable before reassignment happens) but broke `mypy`'s ability to check
+  the rest of the function, masking a real, separate bug underneath it.
+- A stray space inside an f-string format spec (`{value: +.2f}` instead of `{value:+.2f}`) —
+  crashed with `ValueError` on the first sector item, only surfacing once the two bugs stacked
+  above it were cleared.
+- `item.raw_data`'s declared type (`dict | list | None`, kept broad for other potential uses)
+  didn't match its actual guaranteed shape at the one call site that needed it — resolved with
+  `cast`, the same idiom already used for `item.value`'s narrower-in-practice-than-declared type.
+- `.scalar()` instead of `.scalars()`, `model_dunp` instead of `model_dump`, `extras=` instead of
+  `extra=` (the last one meaning the very error-logging path meant to isolate one user's failure
+  would itself have thrown a new, different exception) — all caught by `mypy` once surfaced.
+- A DB session queried after its own `with SessionLocal()` block had already closed — not caught
+  by any tool, only by reading the indentation.
+
+**End-to-end verification, run live, not just type-checked:**
+- The full generation path against a real user's real data produced a coherent, well-structured
+  `BriefingContent` (1 headline, 4 sections) correctly framed around that user's category ("early-
+  career prospects," "internships" for a `student` user). Spot-checked for fabrication: a set of
+  HELOC/home-equity figures in the output initially looked hallucinated (never explicitly formatted
+  into the prompt as structured data) — traced back and confirmed they came from a real attached
+  Marketaux news article's summary text, correctly grounding the narrative in supplied news rather
+  than inventing numbers, exactly as the developer message instructs.
+- Quiet-day short-circuit confirmed to make zero API calls when a user's filtered dataset is empty.
+- Skip-if-exists confirmed by running `generate_and_persist_all_briefings` twice against the same
+  date — identical row count both times, no duplicate.
+- M17's sector fix (item 2 above) re-verified live: 10 of 11 sectors correctly survived the
+  Marketaux coverage filter against real data (only Consumer Defensive had no matching news that
+  day) — up from the old ceiling of 2. Gainer/loser coverage wasn't confirmed in this same run;
+  FMP's free-tier daily quota (250 requests/day) was exhausted partway through by the volume of
+  live testing done this session. A reminder is scheduled for 2026-08-10 to finish that check once
+  the quota resets.
+
 ### Milestone 17 — Daily Data Pipeline & Storage (complete, 2026-08-03)
 
-All three pieces from `docs/09` §8 are done, and the full chain has been verified end-to-end
+*(Amended 2026-08-09 during M18: the sector-persistence gap described below — only the best/worst
+of 11 sectors ever became a `DailyDataItem` — was found and fixed while building M18's category
+mapping. See M18's write-up above for the fix and its live re-verification.)*
+
+All three pieces from `docs/08` §8 are done, and the full chain has been verified end-to-end
 against the live FMP/FRED/Marketaux APIs and the live Supabase database — not just type-checked.
 
 **1. Models + migration.** `backend/app/models/daily_data_items.py` (`DailyDataItem`) and
@@ -382,7 +534,11 @@ requirements.md` §10 (MVP Definition) also still describes the product around "
 economic events" and needs a matching reframe — deliberately deferred as its own separate
 conversation, not done as part of this docs cleanup pass.
 
-### Current implementation state — Milestone 12 is functionally DONE, not yet formally signed off
+### Milestone 12 — FMP Market Data Service (complete, formal sign-off closed out 2026-08-09)
+
+The code itself was done and verified back on 2026-07-17; only the formal sign-off (this checklist
+entry, this section header) was left open for several milestones. Closing it out now, alongside
+Milestone 18, since both touch the same "Completed Milestones" list.
 
 - **`backend/app/services/fmp_service.py` is complete and verified working end-to-end against the
   real, live FMP API** (2026-07-17): `fetch_market_snapshot`, `fetch_sector_performance`,
@@ -398,34 +554,22 @@ conversation, not done as part of this docs cleanup pass.
   `economic_event.py`/`EconomicEvent` — that dead weight is gone, not just unused.
 - `backend/app/core/config.py` / `backend/.env.example` — `fmp_api_key` wired and confirmed
   working. Real `backend/.env` has a real, working `FMP_API_KEY` (gitignored, not committed).
+- **Resolved since this section was first written:**
+  - **The re-scoping question** ("what do Milestones 13/16/18/20 even mean without discrete
+    events") is what `docs/08-personalization-pivot-plan.md` turned out to answer — not a
+    continuation of Milestone 12's original numbering, but a full pivot toward per-user
+    personalization, with its own milestone breakdown (new Milestones 13-22) that's since been
+    implemented through Milestone 18 (see above). The `economic_events`-based persistence model
+    referenced below was itself superseded and later deleted (see Milestone 18's write-up, item 3).
 - **Still open, not yet done:**
   - **Key rotation** — the FMP key was briefly printed into a terminal error message during
     ad-hoc testing early in this milestone (same category as the Milestone 6 Supabase key
-    exposure). Worth rotating from the FMP dashboard; not yet confirmed done.
-  - **Formal sign-off** — `docs/03-development-roadmap.md`'s Milestone 12 section was updated
-    *during* the pivot (objective/deliverables/acceptance criteria), but this resume-prompt doc's
-    "Completed Milestones" checklist still doesn't list Milestone 12, and there's no
-    "Milestone 12 (complete)" write-up yet in the style of Milestones 3-11 below. Do this once the
-    downstream-pipeline question (next bullet) is at least scoped, so the sign-off reflects the
-    final shape of things.
-  - **The big one: Milestones 13/16/18/20 need a full re-scoping conversation, not just a
-    rename.** These were designed around discrete "events" flowing through the pipeline (fetch
-    events → match to FRED series → search news per event → rank with OpenAI) — Milestone 13
-    specifically ("Store Finnhub Events") is entirely about persisting/deduplicating/filtering
-    events, none of which fits Milestone 12's actual output anymore (a market snapshot + sector
-    movers + a company spotlight, no discrete events at all). **This is explicitly the next thing
-    to tackle when picking this back up** — work out what the app's remaining milestones should
-    actually be, given the FMP pivot, before writing any more code. Likely touches: what
-    persistence looks like (probably `index_quotes`/`sector_performance`/`company_spotlights`
-    tables instead of `economic_events`, using natural `(symbol/sector, date)` keys instead of a
-    synthetic event ID — no hashing needed this time, see Important Decisions), what Milestone 16
-    (FRED)/18 (Marketaux)/20 (OpenAI) even mean without discrete events to enrich, and whether
-    `docs/02-system-architecture.md` §5's data-flow diagram and the `economic_events` table under
-    §12 (both deliberately left un-updated during the mechanical docs pass) still make sense at
-    all.
+    exposure). Worth rotating from the FMP dashboard; still not confirmed done, explicitly
+    deferred as low-urgency.
   - `docs/01-product-requirements.md` §10 (MVP Definition) still describes "five most important
-    economic events" — also deferred, likely resolved together with the milestone re-scoping
-    above rather than as a separate pass.
+    economic events" — not yet reconciled with the personalization pivot's actual shape. Also
+    likely worth checking `docs/02-system-architecture.md` §5/§12 for the same kind of staleness
+    given how much has changed since either doc was last touched.
 
 Working agreement from Milestone 10 (user writes pseudocode/implementation, Claude handles
 configuration/tooling + technical edge cases + Phases 1/5/6/7) held throughout this pivot and the
@@ -1237,7 +1381,7 @@ walris/
   `fastapi.HTTPException` (see Milestone 9 notes for why that distinction mattered)
 - `backend/app/routers/__init__.py` — empty `v1_router`, the real infrastructure for API
   versioning, ready for Milestone 10+'s first real endpoint
-- `docs/08-code-reference-milestones-3-6-9.md` — snapshot of the actual code from the three
+- `docs/07-code-reference-milestones-3-6-9.md` — snapshot of the actual code from the three
   milestones that involved real logic (not just config), for study — not a template to copy
   forward now that the user writes implementation starting Milestone 10
 - `mobile/hooks/useHealthCheck.ts` — first user-written implementation on the project:
@@ -1390,23 +1534,27 @@ EXPO_PUBLIC_API_BASE_URL
 
 ## Next Steps
 
-1. **PRIORITY when resuming: finish Milestone 13's mobile side.** The backend half is done and
-   verified (see the Milestone 13 progress notes above) — `User` model, migrations,
-   `get_current_user`. What's left: `<ClerkProvider>` in `mobile/app/_layout.tsx` (using the
-   `tokenCache` from `@clerk/expo/token-cache`, already installed), then sign-up/sign-in screens
-   (likely a new `app/(auth)/` route group — no route groups exist yet in this app). Once that's
-   done, Milestone 13 is complete and Milestone 14 (Category & Topic Selection, per `docs/09`) is
-   next. Note: `docs/03-development-roadmap.md`'s Milestones 27+ (mobile UI, notifications) have
-   an explicit flag noting they still assume no-auth/single-global-briefing and need their own
-   re-scoping pass before being started as-is — not urgent until Milestone 22ish is reached, but
-   don't skip it when the time comes.
-2. **Formally sign off Milestone 12** — add it to the "Completed Milestones" checklist above and
-   write its own "(complete)" section in the style of Milestones 3-11 below, summarizing the
-   pivot/decisions/bugs-caught the same way those do. Reasonable to do alongside #1 or separately.
-3. Rotate the FMP API key (briefly exposed in a terminal error message during testing) as a
-   precaution — still not confirmed done.
-4. Decide whether/how to wire `pytest` into CI (see Known Issues) — needs a decision on test
+*(Rewritten 2026-08-09 — the version of this section below dated back to early Milestone 13 and
+no longer reflected reality; items 1 and 2 from that version are done, described in the Milestone
+12/13 sections above.)*
+
+1. **PRIORITY when resuming: Milestone 19 — Daily Briefing Orchestrator.** Per `docs/08` §12,
+   `briefing_service.py` wiring Milestones 15-18 together end to end (fetch FRED → fetch Marketaux
+   → filter/persist the day's raw data → run `openai_service.py`'s per-user generation loop →
+   trigger the 48-hour cleanup), plus one `job_runs` row per run.
+2. **Finish the FMP rate-limit-interrupted M17 re-verification** — a reminder is scheduled for
+   2026-08-10 (see Milestone 18's write-up above). Gainer/loser coverage under the sector fix
+   still needs confirming once FMP's daily quota resets; the sector-count part is already
+   confirmed (10 of 11).
+3. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
+   onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
+4. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12
+   testing) as a precaution — still not confirmed done.
+5. Decide whether/how to wire `pytest` into CI (see Known Issues) — needs a decision on test
    database strategy before it's a simple config change.
-5. Continue the personalization pivot Milestones 13-23 per `docs/09`.
-6. Once the personalization pivot's backend is complete, revisit and re-scope Milestones 27+
-   (Mobile App, Notifications) against it before starting them.
+6. `docs/01-product-requirements.md` §10 (MVP Definition) still describes "five most important
+   economic events," not reconciled with the personalization pivot — worth checking
+   `docs/02-system-architecture.md` §5/§12 for the same kind of staleness while at it.
+7. Once the personalization pivot's backend (Milestones 19-22) is complete, revisit and re-scope
+   `docs/03-development-roadmap.md`'s Milestones 27+ (Mobile App, Notifications) against it before
+   starting them — those sections still assume no-auth/single-global-briefing.
