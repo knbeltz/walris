@@ -1,7 +1,9 @@
 from dataclasses import dataclass
+from typing import Any, cast
 
 from app.models.daily_data_items import DailyDataItem
 from app.models.daily_data_news import DailyDataNews
+from app.schemas.user_briefing import BriefingContent
 
 CATEGORY_MAIN_QUESTIONS: dict[str, str] = {
     "investor": (
@@ -77,3 +79,58 @@ def build_developer_message(category: str) -> str:
 class DailyDataItemWithNews:
     item: DailyDataItem
     news: tuple[DailyDataNews, ...]
+
+
+def build_user_message(item_with_news: list[DailyDataItemWithNews]) -> str:
+    paragraphs = []
+
+    for news_item in item_with_news:
+        item = news_item.item
+        raw = cast(dict[str, Any], item.raw_data)
+
+        # a. classify + b. build the data sequence
+        if item.source == "fred":
+            sentence = f"{raw['name']}: {raw['value'] if raw['value'] is not None else 'no data'}"
+
+        elif item.item_key.startswith("sector:"):
+            sentence = f"{raw['sector']}: {raw['average_change']:+.2f}%"
+
+        elif item.item_key.startswith("company"):
+            label = "Gainer" if raw["direction"] == "gainer" else "Loser"
+            sentence = (
+                f"{raw['name']} ({label}): ${raw['price']:.2f} ({raw['change_percentage']:+.2f}%)"
+            )
+
+        else:
+            sentence = f"{raw['name']}: {raw['price']:.2f} ({raw['change_percentage']:+.2f}%)"
+
+        # c. news lines
+
+        if news_item.news:
+            news_lines = [
+                f'- "{article.headline}" ({article.source}): {article.summary}'
+                for article in news_item.news
+            ]
+        else:
+            news_lines = ["No related news."]
+
+        # D. Combine
+        paragraph = sentence + "\n" + "\n".join(news_lines)
+
+        # E. Collect
+
+        paragraphs.append(paragraph)
+
+    return "\n\n".join(paragraphs)
+
+
+def build_quiet_day_briefing() -> BriefingContent:
+    """
+    The fallback BriefingContent for a user whose filtered dataset is
+    empty for the day. No OpenAI call is made in this case — see the
+    quiet-day design decision in docs/08.
+    """
+    return BriefingContent(
+        headline="Nothing notable to report today.",
+        sections=[],
+    )

@@ -1,12 +1,19 @@
+import asyncio
+import logging
 from datetime import date
 from typing import cast
 
+import openai
+from openai import AsyncOpenAI
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.daily_data_items import DailyDataItem
 from app.models.daily_data_news import DailyDataNews
 from app.models.user import User
+from app.models.user_briefings import UserBriefing
+from app.schemas.user_briefing import BriefingContent
 from app.services.fmp_category_rules import (
     CATEGORY_ITEM_KEYS,
     CATEGORY_MARKET_CONTENT,
@@ -14,7 +21,18 @@ from app.services.fmp_category_rules import (
     TOPIC_MARKET_CONTENT,
     MarketContentRules,
 )
-from app.services.prompt_services import DailyDataItemWithNews
+from app.services.prompt_services import (
+    DailyDataItemWithNews,
+    build_developer_message,
+    build_quiet_day_briefing,
+    build_user_message,
+)
+
+logger = logging.getLogger(__name__)
+
+client = AsyncOpenAI(api_key=settings.openai_api_key)
+
+MAX_CONCURRENCY = 10
 
 
 def get_relevant_fred_item_keys(user: User) -> frozenset[str]:
@@ -238,3 +256,70 @@ def get_user_daily_data_with_news(
         fred_items,
         relevant_fmp_items,
     )
+
+
+async def generate_briefing_content(user: User, as_of: date) -> BriefingContent:
+    """
+    Makes the OpenAI call to get the content that will be briefed to the user.
+    """
+
+    data = get_user_daily_data_with_news(user, as_of)
+
+    if not data:
+        return build_quiet_day_briefing()
+
+    developer_message = build_developer_message(cast(str, user.category))
+    user_message = build_user_message(data)
+
+    response = await client.responses.parse(
+        model="gpt-5-nano",
+        input=[
+            {"role": "developer", "content": developer_message},
+            {"role": "user", "content": user_message},
+        ],
+        text_format=BriefingContent,
+    )
+
+    if response.output_parsed is None:
+        return build_quiet_day_briefing()
+
+    else:
+        return response.output_parsed
+
+
+async def generate_and_persist_all_briefings(as_of: date) -> None:
+    with SessionLocal() as session:
+        users = session.scalars(select(User).where(User.category.is_not(None))).all()
+
+        already_done_user_ids = set(
+            session.scalars(select(UserBriefing.user_id).where(UserBriefing.date == as_of)).all()
+        )
+
+        users_needing_briefings = [user for user in users if user.id not in already_done_user_ids]
+
+    semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
+
+    async def generate_one(user: User) -> None:
+        async with semaphore:
+            try:
+                content = await generate_briefing_content(user, as_of)
+
+            except openai.OpenAIError:
+                logger.exception(
+                    "Failed to generate briefing for user",
+                    extra={"user_id": user.id},
+                )
+                return
+
+            with SessionLocal() as session:
+                session.add(
+                    UserBriefing(
+                        user_id=user.id,
+                        date=as_of,
+                        content=content.model_dump(mode="json"),
+                    )
+                )
+                session.commit()
+
+    tasks = [generate_one(user) for user in users_needing_briefings]
+    await asyncio.gather(*tasks)
