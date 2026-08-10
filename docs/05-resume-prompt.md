@@ -1,9 +1,11 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-08-09 (Milestone 18 — Per-User OpenAI Briefing Generation — complete and
-verified end-to-end against the live OpenAI API, live FMP/FRED/Marketaux APIs, and the live
-Supabase database. Milestone 12's long-pending formal sign-off is also closed out below.)
+**Last Updated:** 2026-08-10 (Milestone 19 — Daily Briefing Orchestrator — code complete and
+reviewed, but **not yet formally signed off**: live end-to-end verification against the real
+pipeline is deliberately deferred to 2026-08-11, to avoid burning FMP's daily rate limit a third
+time this week and to combine it with finishing Milestone 17's interrupted gainer/loser check in
+one real run. Milestone 18 (previous update, 2026-08-09) remains complete and verified.)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -53,8 +55,13 @@ prompt, and sent to `gpt-5-nano` to produce a structured `BriefingContent` (head
 sections), persisted one row per user per day in the new `user_briefings` table. Verified
 end-to-end against the live OpenAI API (not just type-checked), including the quiet-day fallback
 path (no relevant data → no API call, just a static message) and the per-user loop's
-skip-if-exists behavior. The next actual coding work is Milestone 19 (Daily Briefing Orchestrator)
-per that plan.
+skip-if-exists behavior. **Milestone 19 (Daily Briefing Orchestrator) is code-complete but not yet
+formally signed off** — `briefing_service.py`'s `run_daily_briefing_job` wires M15-18 together
+(fetch/filter/persist raw data → per-user generation loop → 48-hour cleanup) and writes one
+`job_runs` row per run, reviewed and verified for correct session/async handling, but never yet
+run against the real pipeline end-to-end. That live run is scheduled for 2026-08-11, deliberately
+combined with finishing M17's gainer/loser re-verification (see M17's amendment note above) in one
+pass rather than spending FMP's daily quota on two separate partial runs.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -82,18 +89,86 @@ per that plan.
 - [x] **Milestone 16 — Marketaux Service**
 - [x] **Milestone 17 — Daily Data Pipeline & Storage**
 - [x] **Milestone 18 — Per-User OpenAI Briefing Generation**
-- [ ] Milestones 19–26 — Core Backend (Part 2, remainder)
+- [ ] **Milestone 19 — Daily Briefing Orchestrator** (code complete, live verification scheduled
+  for 2026-08-11 — see notes below; not yet checked off pending that run)
+- [ ] Milestones 20–26 — Core Backend (Part 2, remainder)
 - [ ] Milestones 27–40 — Mobile App (Part 3)
 - [ ] Milestones 41–56 — Notifications, QA, Deployment & Launch (Part 4)
 
 ## Current Milestone
 
-**Milestone 19 — Daily Briefing Orchestrator** (not yet started). Milestones 12–18 are all
-complete. **Milestone 14's core flow is verified end-to-end on a real device** — sign-up →
-`/category` → `/topics` → `/` all confirmed working against the live database. Two smaller pieces
-of M14 are still outstanding (name field, settings screen — see M14 notes below), but the flow
-itself is no longer blocked. The personalization pivot is fully planned in
-`docs/08-personalization-pivot-plan.md`.
+**Milestone 19 — Daily Briefing Orchestrator** (code complete, live verification pending). All of
+`briefing_service.py` is written and reviewed — see the write-up below for what got built and the
+real bugs caught along the way. What's left is purely verification: running it against the real
+pipeline, scheduled for 2026-08-11. Milestones 12–18 are all complete. **Milestone 14's core flow
+is verified end-to-end on a real device** — sign-up → `/category` → `/topics` → `/` all confirmed
+working against the live database. Two smaller pieces of M14 are still outstanding (name field,
+settings screen — see M14 notes below), but the flow itself is no longer blocked. The
+personalization pivot is fully planned in `docs/08-personalization-pivot-plan.md`.
+
+### Milestone 19 — Daily Briefing Orchestrator (code complete 2026-08-10, live verification pending)
+
+Per `docs/08` §12, this milestone's job is `briefing_service.py`, wiring Milestones 15-18 together
+end to end with one `job_runs` row per run. The code itself is done and reviewed; **it has not yet
+been run against the real pipeline** — deliberately deferred to avoid a third same-day hit against
+FMP's free-tier rate limit (see M17's amendment note above) and to combine it with finishing that
+interrupted verification in one real run, scheduled for 2026-08-11.
+
+**What got built.** `backend/app/services/briefing_service.py` — `run_daily_briefing_job(as_of)`:
+creates a `JobRun` row (`job_name="daily_briefing_job"`, `status="running"`) and commits it
+immediately, before anything risky runs, so a run's start is on record even if something crashes
+unexpectedly later. Then: stage 1 (`fetch_covered_daily_data_candidates` →
+`saved_covered_daily_data_candidates`) and stage 2 (`generate_and_persist_all_briefings`) run
+inside one `try`/`except` — if stage 1 fails, stage 2 never runs, by design (a deliberate decision,
+not an accident: no fresh data means nothing to personalize from). Stage 3
+(`delete_stale_daily_data`) runs in its own separate `try`/`except` regardless of whether stages
+1/2 succeeded, since it's independent maintenance (purging data older than 48 hours) unrelated to
+today's fetch/generation outcome — the reasoning being that a bad day for fetching new data
+shouldn't also mean old data stops aging out, which would work against the whole point of the
+48-hour retention design. `MARKET_CAP_THRESHOLD = 10_000_000_000.0` is now a real named constant
+in this file — previously every call site across the whole session (including all of M17/M18's
+own testing) just typed the same $10B magic number by hand.
+
+**Real bugs found and fixed, none caught by casual reading — all via `mypy` or direct testing:**
+- Both async calls (`fetch_covered_daily_data_candidates`, `generate_and_persist_all_briefings`)
+  were originally called without `await` — silently created coroutine objects that never actually
+  ran, meaning neither the fetch nor the generation loop executed at all. `mypy`:
+  `Value of type "Coroutine[...]" must be used`.
+- `fetch_covered_daily_data_candidates`'s return value was discarded, and
+  `saved_covered_daily_data_candidates` was called with only one argument (`as_of`) instead of its
+  real two (`covered_candidates`, `as_of`) — meaning the date value would have bound to the wrong
+  parameter entirely. `mypy` caught both.
+- **The most dangerous one, caught by mypy on neither pass — only by actually running it**: an
+  early draft's `with SessionLocal() as session:` block only wrapped the `JobRun` row's *creation*,
+  not the rest of the function. Everything after — including the final `job_run.status = ...`
+  assignments and the closing `session.commit()` — ran *after* the session had already closed.
+  Proved live (using a disposable test row, no external APIs involved) that this doesn't raise any
+  exception at all: the commit "succeeds" silently, but nothing actually gets written, because the
+  detached `job_run` object is no longer tracked by the closed session. Every run would have shown
+  `status="running"` forever, indistinguishable from a run that's still in progress, with no error
+  to indicate anything was ever wrong. Fixed by extending the `with` block to cover the entire
+  function body; re-verified live afterward that a full create → mutate → commit cycle within one
+  session actually persists correctly.
+
+**A separate, unrelated bug found and fixed along the way, while re-attempting M17's live
+verification this morning**: `fred_service.py`'s `_log_request_error` (and a second, duplicate
+`extra={...}` call in `fetch_all`'s `ValueError` branch) passed a context key literally named
+`name` — which collides with `logging.LogRecord`'s own reserved `name` attribute (the logger's
+name, unrelated to a FRED series' name) and raised `KeyError: "Attempt to overwrite 'name' in
+LogRecord"` from *inside* the error-logging path itself. Net effect: a single transient network
+timeout on one of 39 FRED indicators crashed the entire batch instead of being logged and skipped,
+exactly defeating the "skip-and-continue per item" design M15 was built around. Renamed the
+colliding key to `indicator_name` in both spots; confirmed live afterward that the real pipeline
+run completed cleanly (all 39 FRED calls attempted, 29 covered by news; all 11 sectors correctly
+persisted and 11 of 11 survived the coverage filter — full confirmation of M17's earlier sector
+fix, up from yesterday's partial 10 of 11).
+
+**Still outstanding before this milestone is truly done**: the live end-to-end run itself
+(scheduled 2026-08-11) — confirming `run_daily_briefing_job` actually produces a correct `JobRun`
+row and real `UserBriefing` rows when run for real, not just that its pieces work in isolation, and
+finishing M17's gainer/loser confirmation (blocked twice this week by FMP's rate limit — a single
+real run uses close to 100 of the 250 daily requests just on gainer/loser profile lookups, so
+repeated same-day testing keeps exhausting it before that specific check completes).
 
 ### Milestone 18 — Per-User OpenAI Briefing Generation (complete, 2026-08-09)
 
@@ -1534,27 +1609,34 @@ EXPO_PUBLIC_API_BASE_URL
 
 ## Next Steps
 
-*(Rewritten 2026-08-09 — the version of this section below dated back to early Milestone 13 and
-no longer reflected reality; items 1 and 2 from that version are done, described in the Milestone
-12/13 sections above.)*
+*(Rewritten 2026-08-09, updated 2026-08-10 — the version of this section below the previous rewrite
+dated back to early Milestone 13 and no longer reflected reality; items 1 and 2 from that version
+are done, described in the Milestone 12/13 sections above.)*
 
-1. **PRIORITY when resuming: Milestone 19 — Daily Briefing Orchestrator.** Per `docs/08` §12,
-   `briefing_service.py` wiring Milestones 15-18 together end to end (fetch FRED → fetch Marketaux
-   → filter/persist the day's raw data → run `openai_service.py`'s per-user generation loop →
-   trigger the 48-hour cleanup), plus one `job_runs` row per run.
-2. **Finish the FMP rate-limit-interrupted M17 re-verification** — a reminder is scheduled for
-   2026-08-10 (see Milestone 18's write-up above). Gainer/loser coverage under the sector fix
-   still needs confirming once FMP's daily quota resets; the sector-count part is already
-   confirmed (10 of 11).
-3. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
+1. **PRIORITY when resuming: run Milestone 19's live end-to-end verification.** Code is done
+   (`briefing_service.py`'s `run_daily_briefing_job`, see the Milestone 19 write-up above) — what's
+   left is running it for real. Scheduled for 2026-08-11, deliberately combined with #2 below in
+   one run rather than spending FMP's daily quota twice. Once this passes, formally check off
+   Milestone 19 in the checklist above and move to Milestone 20.
+2. **Finish the FMP rate-limit-interrupted M17 gainer/loser re-verification** — blocked twice in a
+   row now (2026-08-09 and 2026-08-10) by FMP's free-tier daily rate limit; the sector-count part
+   is already fully confirmed (11 of 11, as of 2026-08-10). A single real pipeline run uses close
+   to 100 of the 250 daily requests just on gainer/loser profile lookups, so this needs to happen
+   as one clean run, not repeated same-day attempts.
+3. **Milestone 20 — Personalized Briefing API** is next after that: an endpoint serving a
+   signed-in user's own `user_briefings` row, replacing the old single-briefing `GET
+   /briefings/today` design. Not blocked on #1/#2 succeeding — it only needs `user_briefings` rows
+   to exist, which they already do — but sequenced after them by choice, to avoid building on top
+   of an unverified `run_daily_briefing_job` if that run surfaces something.
+4. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
-4. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12
+5. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12
    testing) as a precaution — still not confirmed done.
-5. Decide whether/how to wire `pytest` into CI (see Known Issues) — needs a decision on test
+6. Decide whether/how to wire `pytest` into CI (see Known Issues) — needs a decision on test
    database strategy before it's a simple config change.
-6. `docs/01-product-requirements.md` §10 (MVP Definition) still describes "five most important
+7. `docs/01-product-requirements.md` §10 (MVP Definition) still describes "five most important
    economic events," not reconciled with the personalization pivot — worth checking
    `docs/02-system-architecture.md` §5/§12 for the same kind of staleness while at it.
-7. Once the personalization pivot's backend (Milestones 19-22) is complete, revisit and re-scope
+8. Once the personalization pivot's backend (Milestones 19-22) is complete, revisit and re-scope
    `docs/03-development-roadmap.md`'s Milestones 27+ (Mobile App, Notifications) against it before
    starting them — those sections still assume no-auth/single-global-briefing.

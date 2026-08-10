@@ -143,7 +143,7 @@ async def fetch_all() -> list[FredObservation]:
                         "Failed to fetch FRED observation",
                         error,
                         series_id=series_id,
-                        name=name,
+                        indicator_name=name,
                     )
                     return None
 
@@ -152,7 +152,7 @@ async def fetch_all() -> list[FredObservation]:
                         "FRED returned invalid or missing observation data",
                         extra={
                             "series_id": series_id,
-                            "name": name,
+                            "indicator_name": name,
                         },
                     )
                     return None

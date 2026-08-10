@@ -50,5 +50,6 @@ In active development. Milestones 1-18 are complete (backend foundation, Supabas
 accounts via Clerk, category/topic selection, the FRED/Marketaux fetch services, a full
 fetch-filter-persist-cleanup pipeline for daily market/news data, and per-user OpenAI briefing
 generation, verified end-to-end against live APIs, the live OpenAI API, and the live database).
-Milestone 19 (Daily Briefing Orchestrator) is next. See `docs/05-resume-prompt.md` for the current
-milestone and next steps.
+Milestone 19 (Daily Briefing Orchestrator) is code-complete but awaiting live end-to-end
+verification before formal sign-off. See `docs/05-resume-prompt.md` for the current milestone and
+next steps.
