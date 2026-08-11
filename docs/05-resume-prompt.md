@@ -1,11 +1,10 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-08-10 (Milestone 19 — Daily Briefing Orchestrator — code complete and
-reviewed, but **not yet formally signed off**: live end-to-end verification against the real
-pipeline is deliberately deferred to 2026-08-11, to avoid burning FMP's daily rate limit a third
-time this week and to combine it with finishing Milestone 17's interrupted gainer/loser check in
-one real run. Milestone 18 (previous update, 2026-08-09) remains complete and verified.)
+**Last Updated:** 2026-08-11 (Milestone 20 — Personalized Briefing API — complete and verified,
+including live-testing both branches of its logic against real data. Milestone 19's live
+end-to-end verification also passed today, fully signed off, and doubled as the final confirmation
+of Milestone 17's previously-interrupted gainer/loser check.)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -55,13 +54,17 @@ prompt, and sent to `gpt-5-nano` to produce a structured `BriefingContent` (head
 sections), persisted one row per user per day in the new `user_briefings` table. Verified
 end-to-end against the live OpenAI API (not just type-checked), including the quiet-day fallback
 path (no relevant data → no API call, just a static message) and the per-user loop's
-skip-if-exists behavior. **Milestone 19 (Daily Briefing Orchestrator) is code-complete but not yet
-formally signed off** — `briefing_service.py`'s `run_daily_briefing_job` wires M15-18 together
-(fetch/filter/persist raw data → per-user generation loop → 48-hour cleanup) and writes one
-`job_runs` row per run, reviewed and verified for correct session/async handling, but never yet
-run against the real pipeline end-to-end. That live run is scheduled for 2026-08-11, deliberately
-combined with finishing M17's gainer/loser re-verification (see M17's amendment note above) in one
-pass rather than spending FMP's daily quota on two separate partial runs.
+skip-if-exists behavior. **Milestone 19 (Daily Briefing Orchestrator) is complete** —
+`briefing_service.py`'s `run_daily_briefing_job` wires M15-18 together (fetch/filter/persist raw
+data → per-user generation loop → 48-hour cleanup) and writes one `job_runs` row per run; its live
+end-to-end run on 2026-08-11 also finally confirmed M17's gainer/loser coverage, blocked twice
+earlier in the week by FMP's rate limit. **Milestone 20 (Personalized Briefing API) is also
+complete** — `GET /v1/users/me/briefing` serves a signed-in user's own `user_briefings` row for
+today, replacing the old single-briefing `GET /briefings/today` design, with a friendly fallback
+message (not an error) when no briefing has been generated yet. Verified live: the route is
+correctly registered and Clerk-protected (confirmed `403`, not `404`, when unauthenticated), and
+both branches of its actual logic — a real found briefing, and the not-yet-generated fallback —
+were tested directly against real data, not just type-checked.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -89,24 +92,77 @@ pass rather than spending FMP's daily quota on two separate partial runs.
 - [x] **Milestone 16 — Marketaux Service**
 - [x] **Milestone 17 — Daily Data Pipeline & Storage**
 - [x] **Milestone 18 — Per-User OpenAI Briefing Generation**
-- [ ] **Milestone 19 — Daily Briefing Orchestrator** (code complete, live verification scheduled
-  for 2026-08-11 — see notes below; not yet checked off pending that run)
-- [ ] Milestones 20–26 — Core Backend (Part 2, remainder)
+- [x] **Milestone 19 — Daily Briefing Orchestrator** (live end-to-end verification passed
+  2026-08-11 — see notes below)
+- [x] **Milestone 20 — Personalized Briefing API** (`GET /v1/users/me/briefing`, verified live
+  2026-08-11 — see notes below)
+- [ ] Milestones 21–26 — Core Backend (Part 2, remainder)
 - [ ] Milestones 27–40 — Mobile App (Part 3)
 - [ ] Milestones 41–56 — Notifications, QA, Deployment & Launch (Part 4)
 
 ## Current Milestone
 
-**Milestone 19 — Daily Briefing Orchestrator** (code complete, live verification pending). All of
-`briefing_service.py` is written and reviewed — see the write-up below for what got built and the
-real bugs caught along the way. What's left is purely verification: running it against the real
-pipeline, scheduled for 2026-08-11. Milestones 12–18 are all complete. **Milestone 14's core flow
-is verified end-to-end on a real device** — sign-up → `/category` → `/topics` → `/` all confirmed
-working against the live database. Two smaller pieces of M14 are still outstanding (name field,
-settings screen — see M14 notes below), but the flow itself is no longer blocked. The
-personalization pivot is fully planned in `docs/08-personalization-pivot-plan.md`.
+**Milestone 21 — Personalized Notifications** (not yet started). Milestones 12–20 are all
+complete. Per `docs/08` §12: `device_tokens.user_id` migration, 7:00 AM daily notification
+triggering per-user briefing delivery. **Milestone 14's core flow is verified end-to-end on a real
+device** — sign-up → `/category` → `/topics` → `/` all confirmed working against the live
+database. Two smaller pieces of M14 are still outstanding (name field, settings screen — see M14
+notes below), but the flow itself is no longer blocked. The personalization pivot is fully planned
+in `docs/08-personalization-pivot-plan.md`.
 
-### Milestone 19 — Daily Briefing Orchestrator (code complete 2026-08-10, live verification pending)
+### Milestone 20 — Personalized Briefing API (complete, 2026-08-11)
+
+Per `docs/08` §12: an endpoint serving a signed-in user's own `user_briefings` row, replacing the
+old single-briefing `GET /briefings/today` design (which made sense pre-pivot, when every user got
+the same briefing — now it needs to be scoped to whoever's authenticated).
+
+**What got built.** `backend/app/routers/briefings.py` — `GET /v1/users/me/briefing`, following
+`users.py`'s exact established pattern (`Depends(get_current_user)` for auth, `Depends(get_db)`
+for the request-scoped session). Chose this path over the plan doc's literal old name
+(`/briefings/today`) deliberately, for consistency with the one other existing endpoint
+(`/users/me/preferences`) rather than preserving a pre-pivot URL that no longer describes what the
+resource actually is. `app/schemas/user_briefing.py` gained `UserBriefingResponse` (`date` +
+`content: BriefingContent`) alongside the existing `BriefingContent`/`BriefingSection`. Registered
+in `app/routers/__init__.py` the same way `users_router` is.
+
+Logic: query `UserBriefing` for `user_id == current user AND date == today`. If found, unpack its
+stored JSONB `content` back into a real `BriefingContent` and return it with the date. If not found
+(the daily job hasn't run yet today, or a brand-new user), return a `200` — not a `404` — with a
+friendly fallback message ("No briefing available yet for today.") in the exact same response
+shape, so the client only ever has to handle one shape regardless of *why* there's nothing to show.
+Deliberately distinct from M18's quiet-day message ("Nothing notable to report today."), since the
+two mean different things: one says the job ran and found nothing relevant, the other says nothing
+has run yet at all.
+
+**Real bugs found and fixed along the way:**
+- `user: User = Depends(get_db)` — passed the database-session dependency where the auth dependency
+  belonged, meaning a `Session` object would have been injected where a `User` was expected. Not
+  caught by `mypy`: FastAPI's `Depends()` stub accepts `Any`, so it never actually checks a
+  dependency function's real return type against the parameter's annotation — this kind of mismatch
+  is invisible to the type-checker no matter how carefully the rest of the file is typed.
+- `db.scaler(...)` — typo for `db.scalar(...)`; this one `mypy` did catch (`"Session" has no
+  attribute "scaler"`).
+- **The most consequential one, found only by actually running it, not by reading or type-checking**:
+  the route was declared as `@router.get("users/me/briefing", ...)` — missing its leading slash.
+  Tested directly with `TestClient`: with the slash, `GET /v1/users/me/briefing` → `200`; without
+  it, the same request → `404`, because the router's `/v1` prefix concatenates directly onto the
+  route string with no separator, silently registering the endpoint at `/v1users/me/briefing`
+  instead — a URL nothing would ever actually call. `mypy` and `ruff` both had nothing to say about
+  either version; this only surfaced by hitting the app with a real request and checking the status
+  code.
+- Two typos in the fallback message text ("Np birefing" → "No briefing").
+
+**Verified live, not just type-checked:**
+- `TestClient` request to `GET /v1/users/me/briefing` with no auth token → `403 Forbidden`, not
+  `404` — confirms the route is registered at the correct path and Clerk's auth guard is actually
+  being reached.
+- Called the endpoint function directly (bypassing HTTP-level Clerk auth, which needs a real token)
+  against the real database: the "found" branch correctly retrieved and reconstructed the real
+  `UserBriefing` row created during M19's live run that same day (headline, all 3 sections intact);
+  the "not found" branch, tested against a date with no persisted row, correctly returned the exact
+  fallback message with empty `sections`.
+
+### Milestone 19 — Daily Briefing Orchestrator (complete, 2026-08-11)
 
 Per `docs/08` §12, this milestone's job is `briefing_service.py`, wiring Milestones 15-18 together
 end to end with one `job_runs` row per run. The code itself is done and reviewed; **it has not yet
@@ -163,12 +219,24 @@ run completed cleanly (all 39 FRED calls attempted, 29 covered by news; all 11 s
 persisted and 11 of 11 survived the coverage filter — full confirmation of M17's earlier sector
 fix, up from yesterday's partial 10 of 11).
 
-**Still outstanding before this milestone is truly done**: the live end-to-end run itself
-(scheduled 2026-08-11) — confirming `run_daily_briefing_job` actually produces a correct `JobRun`
-row and real `UserBriefing` rows when run for real, not just that its pieces work in isolation, and
-finishing M17's gainer/loser confirmation (blocked twice this week by FMP's rate limit — a single
-real run uses close to 100 of the 250 daily requests just on gainer/loser profile lookups, so
-repeated same-day testing keeps exhausting it before that specific check completes).
+**Live end-to-end verification, run for real on 2026-08-11 (`run_daily_briefing_job(date.today())`,
+completed in 46.6s)** — this run also fully closed out M17's gainer/loser confirmation, blocked
+twice earlier in the week by FMP's rate limit:
+- `JobRun`: `status="success"`, real `started_at`/`finished_at`, `error_message=None`.
+- All 11 sectors persisted and covered. **Gainer/loser confirmed for the first time this
+  week** — `company: SE` (+13.67%, gainer) and `company: ONON` (-19.37%, loser) both landed.
+- The 48-hour cleanup fired for real (not just in isolated testing) and correctly purged genuinely
+  stale data — 39 leftover rows from 2026-08-03 (over a week old) were gone after the run, verified
+  directly against the live database, not just "the function didn't error."
+- One real `UserBriefing` row generated (the one live user, category `student`, all 3 FMP topics
+  opted in) — a coherent, well-grounded headline + 3 sections, correctly framed around
+  internships/early-career hiring rather than generic market commentary, every figure traced back
+  to real supplied data. One real content finding, deliberately left alone for now: the filtering
+  pipeline correctly gathered all 29 relevant items including full market/sector/company data (per
+  this user's opted-in topics), but the model's own editorial choice of "a few sections" didn't
+  end up covering any of the market-related content that day — a prompt-design question to revisit
+  once there's a full prototype to test against, not a bug (the data reached the model; it just
+  chose not to write about all of it).
 
 ### Milestone 18 — Per-User OpenAI Briefing Generation (complete, 2026-08-09)
 
@@ -1609,34 +1677,28 @@ EXPO_PUBLIC_API_BASE_URL
 
 ## Next Steps
 
-*(Rewritten 2026-08-09, updated 2026-08-10 — the version of this section below the previous rewrite
-dated back to early Milestone 13 and no longer reflected reality; items 1 and 2 from that version
-are done, described in the Milestone 12/13 sections above.)*
+*(Rewritten 2026-08-09, updated 2026-08-10, updated again 2026-08-11 (twice) — Milestones 19 and
+20 both completed and live-verified today; item 1 from the previous version of this list is done,
+described in the Milestone 20 write-up above.)*
 
-1. **PRIORITY when resuming: run Milestone 19's live end-to-end verification.** Code is done
-   (`briefing_service.py`'s `run_daily_briefing_job`, see the Milestone 19 write-up above) — what's
-   left is running it for real. Scheduled for 2026-08-11, deliberately combined with #2 below in
-   one run rather than spending FMP's daily quota twice. Once this passes, formally check off
-   Milestone 19 in the checklist above and move to Milestone 20.
-2. **Finish the FMP rate-limit-interrupted M17 gainer/loser re-verification** — blocked twice in a
-   row now (2026-08-09 and 2026-08-10) by FMP's free-tier daily rate limit; the sector-count part
-   is already fully confirmed (11 of 11, as of 2026-08-10). A single real pipeline run uses close
-   to 100 of the 250 daily requests just on gainer/loser profile lookups, so this needs to happen
-   as one clean run, not repeated same-day attempts.
-3. **Milestone 20 — Personalized Briefing API** is next after that: an endpoint serving a
-   signed-in user's own `user_briefings` row, replacing the old single-briefing `GET
-   /briefings/today` design. Not blocked on #1/#2 succeeding — it only needs `user_briefings` rows
-   to exist, which they already do — but sequenced after them by choice, to avoid building on top
-   of an unverified `run_daily_briefing_job` if that run surfaces something.
-4. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
+1. **PRIORITY when resuming: Milestone 21 — Personalized Notifications.** Per `docs/08` §12:
+   `device_tokens.user_id` migration, 7:00 AM daily notification triggering per-user briefing
+   delivery. Milestones 12-20 are all complete and live-verified.
+2. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
-5. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12
+3. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12
    testing) as a precaution — still not confirmed done.
-6. Decide whether/how to wire `pytest` into CI (see Known Issues) — needs a decision on test
+4. Decide whether/how to wire `pytest` into CI (see Known Issues) — needs a decision on test
    database strategy before it's a simple config change.
-7. `docs/01-product-requirements.md` §10 (MVP Definition) still describes "five most important
+5. `docs/01-product-requirements.md` §10 (MVP Definition) still describes "five most important
    economic events," not reconciled with the personalization pivot — worth checking
    `docs/02-system-architecture.md` §5/§12 for the same kind of staleness while at it.
-8. Once the personalization pivot's backend (Milestones 19-22) is complete, revisit and re-scope
+6. A real product/prompt-design question surfaced during M19's live verification, deliberately
+   deferred until there's a full prototype to test against: a user's opted-in market/sector/company
+   topics correctly reach the model as real data, but the model's own editorial judgment about
+   which "few sections" to write doesn't guarantee every opted-in topic actually shows up in the
+   output. Worth revisiting whether the developer message needs to require covering every topic
+   area, or whether letting the model choose is the intended behavior.
+7. Once the personalization pivot's backend (Milestones 21-22) is complete, revisit and re-scope
    `docs/03-development-roadmap.md`'s Milestones 27+ (Mobile App, Notifications) against it before
    starting them — those sections still assume no-auth/single-global-briefing.
