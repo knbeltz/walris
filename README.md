@@ -46,10 +46,12 @@ Full documentation lives in [`docs/`](docs/):
 
 ## Status
 
-In active development. Milestones 1-20 are complete (backend foundation, Supabase, CI, user
+In active development. Milestones 1-21 are complete (backend foundation, Supabase, CI, user
 accounts via Clerk, category/topic selection, the FRED/Marketaux fetch services, a full
 fetch-filter-persist-cleanup pipeline for daily market/news data, per-user OpenAI briefing
-generation, the daily briefing orchestrator tying it all together with per-run tracking, and the
-personalized briefing API endpoint, verified end-to-end against live APIs, the live OpenAI API,
-and the live database). Milestone 21 (Personalized Notifications) is next. See
-`docs/05-resume-prompt.md` for the current milestone and next steps.
+generation, the daily briefing orchestrator tying it all together with per-run tracking, the
+personalized briefing API endpoint, and the backend half of personalized push notifications,
+verified end-to-end against live APIs, the live OpenAI API, the live Expo push API, and the live
+database). Milestone 21's mobile registration flow is deliberately deferred to the Mobile App
+phase. Milestone 22 (Backend Integration Test Pass) is next. See `docs/05-resume-prompt.md` for
+the current milestone and next steps.

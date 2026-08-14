@@ -1,10 +1,10 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-08-11 (Milestone 20 — Personalized Briefing API — complete and verified,
-including live-testing both branches of its logic against real data. Milestone 19's live
-end-to-end verification also passed today, fully signed off, and doubled as the final confirmation
-of Milestone 17's previously-interrupted gainer/loser check.)
+**Last Updated:** 2026-08-14 (Milestone 21 — Personalized Notifications — backend scope complete
+and verified live against the real Expo push API and the real database. Deliberately scoped to
+backend only: device token registration and the notification-sending pipeline, with the mobile
+permission-request/token-registration UI deferred to the Mobile App phase, Milestones 27-40.)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -64,7 +64,16 @@ today, replacing the old single-briefing `GET /briefings/today` design, with a f
 message (not an error) when no briefing has been generated yet. Verified live: the route is
 correctly registered and Clerk-protected (confirmed `403`, not `404`, when unauthenticated), and
 both branches of its actual logic — a real found briefing, and the not-yet-generated fallback —
-were tested directly against real data, not just type-checked.
+were tested directly against real data, not just type-checked. **Milestone 21 (Personalized
+Notifications) is complete for its backend scope** — `POST /v1/notifications/register` links a
+device's Expo push token to the signed-in user, and `notification_service.py`'s
+`send_daily_notifications` finds everyone with a real (non-quiet-day) briefing for a given day,
+skips weekends entirely, and sends each active device a push notification via Expo's real API
+concurrently, deactivating any token Expo reports as no longer registered. Deliberately scoped to
+backend only — the mobile side (requesting notification permission, obtaining the Expo push token,
+calling the new registration endpoint) is real work but belongs to the Mobile App phase
+(Milestones 27-40), not this one, and there's no way to test "does a real device actually receive
+this" without it existing yet.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -96,19 +105,105 @@ were tested directly against real data, not just type-checked.
   2026-08-11 — see notes below)
 - [x] **Milestone 20 — Personalized Briefing API** (`GET /v1/users/me/briefing`, verified live
   2026-08-11 — see notes below)
-- [ ] Milestones 21–26 — Core Backend (Part 2, remainder)
+- [x] **Milestone 21 — Personalized Notifications** (backend scope complete and verified live
+  2026-08-14 — mobile registration UI deferred to Milestones 27-40 — see notes below)
+- [ ] Milestone 22 — Backend Integration Test Pass
+- [ ] Milestones 23–26 — Core Backend (Part 2, remainder)
 - [ ] Milestones 27–40 — Mobile App (Part 3)
 - [ ] Milestones 41–56 — Notifications, QA, Deployment & Launch (Part 4)
 
 ## Current Milestone
 
-**Milestone 21 — Personalized Notifications** (not yet started). Milestones 12–20 are all
-complete. Per `docs/08` §12: `device_tokens.user_id` migration, 7:00 AM daily notification
-triggering per-user briefing delivery. **Milestone 14's core flow is verified end-to-end on a real
-device** — sign-up → `/category` → `/topics` → `/` all confirmed working against the live
-database. Two smaller pieces of M14 are still outstanding (name field, settings screen — see M14
-notes below), but the flow itself is no longer blocked. The personalization pivot is fully planned
+**Milestone 22 — Backend Integration Test Pass** (not yet started). Milestones 12–21 are all
+complete (Milestone 21's mobile counterpart intentionally deferred, not a gap). Per `docs/08` §12:
+end-to-end verification of the full new pipeline. **Milestone 14's core flow is verified
+end-to-end on a real device** — sign-up → `/category` → `/topics` → `/` all confirmed working
+against the live database. Two smaller pieces of M14 are still outstanding (name field, settings
+screen — see M14 notes below), but the flow itself is no longer blocked. The personalization pivot
+is fully planned
 in `docs/08-personalization-pivot-plan.md`.
+
+### Milestone 21 — Personalized Notifications (backend scope complete, 2026-08-14)
+
+Per `docs/08` §12 and `docs/02` §8/§22/§23: `device_tokens.user_id` migration, plus the actual
+notification-sending pipeline. **Deliberately scoped to backend only** — decided explicitly before
+starting, for two reasons: the milestone checklist already separates "Core Backend" from "Mobile
+App" as different phases, and practically, testing "does a real notification arrive" needs a real
+Expo push token from a real device with the app installed and permission granted, which doesn't
+exist without the mobile registration flow. The daily briefing job and the notification job are
+kept as two genuinely separate functions, not one combined into the other — matching the
+architecture doc's own description of them as two distinct scheduled jobs, not a decision made for
+convenience.
+
+**A real scheduling question, settled before writing any code**: what happens to Saturday/Sunday?
+Confirmed empirically (during M17's earlier re-verification): FMP's sector-performance endpoint
+returns 0 sectors on weekends, since markets are closed — meaning a weekend run of the daily
+briefing job would still generate a *real, non-empty* briefing (FRED data doesn't stop on
+weekends), just with no market/sector/company content at all, even for users who opted into those
+topics. Decided: the daily briefing job still runs every day regardless (FRED data is still real
+and meaningful), but the *notification* specifically does not fire on weekends — keeping "calm, not
+a firehose" intact without adding complexity to generation itself. A second, related decision: a
+quiet-day briefing (`sections=[]`, M18's fallback) also does not trigger a notification — pinging
+someone with "nothing notable to report" isn't worth doing.
+
+**What got built:**
+- `app/models/device_token.py` — added `user_id` (nullable `UUID`, `ForeignKey("users.id",
+  ondelete="SET NULL")` — nullable specifically to preserve anonymous-device support before a user
+  ever signs in, per the plan doc). Migration generated, reviewed (simple: one column, one FK, no
+  ordering concerns like the earlier legacy-table cleanup had), applied, and verified live via
+  `inspect(engine)`.
+- `app/schemas/device_token.py` — `DeviceTokenRegistration` (`expo_push_token`, `device_id`,
+  `platform`, `timezone`), matching `DeviceToken`'s real fields.
+- `app/routers/notifications.py` — `POST /v1/notifications/register`, following `users.py`'s exact
+  pattern (`Depends(get_current_user)`, `Depends(get_db)`), looking up or creating a `DeviceToken`
+  row by `expo_push_token` and linking its `user_id` to the signed-in user. No separate service
+  file for this — the write is simple enough to live directly in the router, same precedent
+  `put_preferences` already set.
+- `app/services/notification_service.py`:
+  - `send_push_notifications(client, token, title, body)` — a plain `httpx.AsyncClient` POST to
+    Expo's real push endpoint (`https://exp.host/--/api/v2/push/send`), confirmed against Expo's
+    own docs to need no access token for basic sending (`EXPO_ACCESS_TOKEN`, already reserved in
+    `.env.example`, is only for an optional enhanced-security mode, not needed for V1). On an
+    Expo-reported `DeviceNotRegistered` error specifically, marks that `DeviceToken.is_active =
+    False`; any other error just logs a warning, since a transient failure shouldn't permanently
+    deactivate a valid token.
+  - `send_daily_notifications(as_of)` — the batch job: skips entirely on Saturday/Sunday, finds
+    every `UserBriefing` for the given date, skips any with empty `sections` (quiet days), looks up
+    each remaining user's active `DeviceToken`(s), and sends concurrently — one shared
+    `httpx.AsyncClient`, semaphore-bounded, matching `fred_service.py`/`marketaux_service.py`'s
+    established batch pattern exactly. Notification text reuses that day's real briefing headline
+    directly, rather than a separate notification-copy system — it's already personalized and
+    category-aware by construction.
+
+**Real bugs found and fixed along the way:**
+- `db.scaler` — the same typo already caught once in `briefings.py`, recurring here in
+  `notifications.py`'s registration endpoint. Confirmed by `mypy`.
+- The deactivation logic went through two wrong states before landing correctly. First draft:
+  every error type caused deactivation, not just `DeviceNotRegistered` — meaning a transient
+  failure could wrongly deactivate a valid token. The fix attempt then inverted the condition
+  entirely: `DeviceNotRegistered` (the case that's actually supposed to deactivate) fell into the
+  branch that only logged a warning and did nothing, while every *other* error type deactivated the
+  token — backwards in a different way. Caught both times by tracing the actual control flow by
+  hand, not by any tool — `mypy` had nothing to say about either version, since both were valid,
+  type-correct Python that just did the wrong thing.
+- `briefing.headline`, then `briefing.context["headline"]` — two separate wrong guesses at how to
+  reach the briefing's headline before landing on the correct `briefing.content["headline"]`.
+  `UserBriefing.content` is the actual JSONB field; neither `headline` nor `context` exist on the
+  model directly. `mypy` caught both, the second time even suggesting the fix directly
+  (`"UserBriefing" has no attribute "context"; maybe "content"?`).
+
+**Verified live, not just type-checked:**
+- `send_push_notifications` tested directly against a throwaway `DeviceToken` row with a
+  deliberately fake token: Expo correctly rejected it, classified under `DeviceNotRegistered`, and
+  the row's `is_active` flipped from `True` to `False` exactly as designed.
+- `send_daily_notifications` tested end-to-end reusing a real, already-existing `UserBriefing`
+  (2026-08-11's, from M19/M20's own verification — deliberately avoided generating a *new* one just
+  for this test, since that would mean spending real OpenAI/FMP cost with nothing new to prove):
+  correctly found the real briefing, correctly did not skip it (real content, not empty), found the
+  test device token, and attempted the send via the real Expo API — same deactivation behavior
+  confirmed again on the fake token.
+- The weekend skip tested directly against a real Saturday (2026-08-08): returned immediately, no
+  database queries, no send attempts.
 
 ### Milestone 20 — Personalized Briefing API (complete, 2026-08-11)
 
@@ -1677,13 +1772,14 @@ EXPO_PUBLIC_API_BASE_URL
 
 ## Next Steps
 
-*(Rewritten 2026-08-09, updated 2026-08-10, updated again 2026-08-11 (twice) — Milestones 19 and
-20 both completed and live-verified today; item 1 from the previous version of this list is done,
-described in the Milestone 20 write-up above.)*
+*(Rewritten 2026-08-09, updated 2026-08-10, updated 2026-08-11 (twice), updated again 2026-08-14 —
+Milestone 21's backend scope completed and live-verified today; item 1 from the previous version
+of this list is done, described in the Milestone 21 write-up above.)*
 
-1. **PRIORITY when resuming: Milestone 21 — Personalized Notifications.** Per `docs/08` §12:
-   `device_tokens.user_id` migration, 7:00 AM daily notification triggering per-user briefing
-   delivery. Milestones 12-20 are all complete and live-verified.
+1. **PRIORITY when resuming: Milestone 22 — Backend Integration Test Pass.** Per `docs/08` §12:
+   end-to-end verification of the full new pipeline. Milestones 12-21 are all complete
+   (Milestone 21's mobile counterpart intentionally deferred to Milestones 27-40, not outstanding
+   work being skipped).
 2. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
 3. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12
@@ -1699,6 +1795,8 @@ described in the Milestone 20 write-up above.)*
    which "few sections" to write doesn't guarantee every opted-in topic actually shows up in the
    output. Worth revisiting whether the developer message needs to require covering every topic
    area, or whether letting the model choose is the intended behavior.
-7. Once the personalization pivot's backend (Milestones 21-22) is complete, revisit and re-scope
-   `docs/03-development-roadmap.md`'s Milestones 27+ (Mobile App, Notifications) against it before
-   starting them — those sections still assume no-auth/single-global-briefing.
+7. Once Milestone 22 is complete, revisit and re-scope `docs/03-development-roadmap.md`'s
+   Milestones 27+ (Mobile App, Notifications) against the personalization pivot before starting
+   them — those sections still assume no-auth/single-global-briefing, and Milestone 21's deferred
+   mobile registration flow (permission request, Expo push token, calling
+   `POST /v1/notifications/register`) belongs somewhere in that re-scoped range.
