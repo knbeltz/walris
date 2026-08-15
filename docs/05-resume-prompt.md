@@ -1,10 +1,12 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-08-14 (Milestone 21 — Personalized Notifications — backend scope complete
-and verified live against the real Expo push API and the real database. Deliberately scoped to
-backend only: device token registration and the notification-sending pipeline, with the mobile
-permission-request/token-registration UI deferred to the Mobile App phase, Milestones 27-40.)
+**Last Updated:** 2026-08-15 (Milestone 22 — Backend Integration Test Pass — in progress, not yet
+formally signed off. `backend/scripts/integration_check.py` built and mostly verified: a real
+Saturday run showed Steps 1-2 (JobRun, UserBriefing, the API endpoint) fully passing, and Step 3
+(notification send) correctly *not* firing — confirming the weekend-skip design works exactly as
+intended, not a bug. A clean full pass including Step 3's real deactivation needs a weekday run;
+deliberately deferred to 2026-08-17 rather than spending more real FMP/OpenAI cost same-day.)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -73,7 +75,21 @@ concurrently, deactivating any token Expo reports as no longer registered. Delib
 backend only — the mobile side (requesting notification permission, obtaining the Expo push token,
 calling the new registration endpoint) is real work but belongs to the Mobile App phase
 (Milestones 27-40), not this one, and there's no way to test "does a real device actually receive
-this" without it existing yet.
+this" without it existing yet. **Milestone 22 (Backend Integration Test Pass) is in progress** —
+`backend/scripts/integration_check.py`, a real reusable script (not a one-off, per the same
+reasoning Milestone 11 used for building a permanent `pytest` suite instead of a throwaway check)
+that runs the actual daily pipeline (`run_daily_briefing_job`) end to end, reads the result back
+through the real API endpoint (`get_todays_briefing`, called directly rather than over HTTP, since
+the script has no real Clerk session token), then exercises the notification send
+(`send_daily_notifications`) against a throwaway test device token, reporting a clear PASS/FAIL per
+stage rather than just "the script didn't crash." Run for real on a Saturday: Steps 1-2 passed
+cleanly (real `JobRun` success, real `UserBriefing` created, correct date, a real generated
+headline), and Step 3 correctly did *not* deactivate the test token — because `send_daily_notifications`
+is designed to skip weekends entirely, so nothing was ever sent to check. That's the system working
+exactly as intended, not a failure; the script itself just doesn't yet know to expect that
+difference on a weekend. A full clean pass including real deactivation needs a weekday run,
+deliberately deferred to 2026-08-17 rather than spending another round of real FMP/OpenAI cost
+same-day to prove something already independently confirmed twice earlier in the week.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -107,21 +123,70 @@ this" without it existing yet.
   2026-08-11 — see notes below)
 - [x] **Milestone 21 — Personalized Notifications** (backend scope complete and verified live
   2026-08-14 — mobile registration UI deferred to Milestones 27-40 — see notes below)
-- [ ] Milestone 22 — Backend Integration Test Pass
+- [ ] Milestone 22 — Backend Integration Test Pass (in progress — script built, weekend behavior
+  verified correct; full weekday pass scheduled 2026-08-17 — see notes below)
 - [ ] Milestones 23–26 — Core Backend (Part 2, remainder)
 - [ ] Milestones 27–40 — Mobile App (Part 3)
 - [ ] Milestones 41–56 — Notifications, QA, Deployment & Launch (Part 4)
 
 ## Current Milestone
 
-**Milestone 22 — Backend Integration Test Pass** (not yet started). Milestones 12–21 are all
-complete (Milestone 21's mobile counterpart intentionally deferred, not a gap). Per `docs/08` §12:
-end-to-end verification of the full new pipeline. **Milestone 14's core flow is verified
-end-to-end on a real device** — sign-up → `/category` → `/topics` → `/` all confirmed working
-against the live database. Two smaller pieces of M14 are still outstanding (name field, settings
-screen — see M14 notes below), but the flow itself is no longer blocked. The personalization pivot
-is fully planned
-in `docs/08-personalization-pivot-plan.md`.
+**Milestone 22 — Backend Integration Test Pass** (in progress). Milestones 12–21 are all complete
+(Milestone 21's mobile counterpart intentionally deferred, not a gap). Per `docs/08` §12:
+end-to-end verification of the full new pipeline. `backend/scripts/integration_check.py` is
+written, reviewed, and mostly verified live — see the write-up below. What's left: one more run on
+a real weekday (scheduled 2026-08-17) to confirm the notification-send step's real deactivation
+path, the one piece a Saturday run can't exercise by design. **Milestone 14's core flow is
+verified end-to-end on a real device** — sign-up → `/category` → `/topics` → `/` all confirmed
+working against the live database. Two smaller pieces of M14 are still outstanding (name field,
+settings screen — see M14 notes below), but the flow itself is no longer blocked. The
+personalization pivot is fully planned in `docs/08-personalization-pivot-plan.md`.
+
+### Milestone 22 — Backend Integration Test Pass (in progress, started 2026-08-15)
+
+Per `docs/08` §12: end-to-end verification of the full new pipeline. Unlike every prior
+verification this week (all one-off `python -c` scripts, run once and discarded), this one is
+being built as a **permanent, reusable artifact** — `backend/scripts/integration_check.py` —
+following the same reasoning Milestone 11 used to justify a real `pytest` suite over a throwaway
+script: a script proves something worked once, on the date it ran; something you can re-run is a
+standing, repeatable check. Deliberately kept as a standalone script rather than added to the real
+`pytest` suite, though — `test_models.py` only exercises the database layer with no real cost or
+rate-limit exposure; this script calls the *real* FMP, FRED, Marketaux, and OpenAI APIs and writes
+to the *real* database, which is exactly the kind of thing that shouldn't run automatically on
+every CI push (a lesson already learned the hard way this week from hitting FMP's daily quota
+twice just from manual testing).
+
+**What it does**: runs `run_daily_briefing_job(as_of)` for real (Step 1), reads the result back
+through `get_todays_briefing` — called directly rather than over HTTP, since the script has no
+real Clerk session token to authenticate with (Step 2) — then creates a throwaway test
+`DeviceToken` and runs `send_daily_notifications(as_of)` against it (Step 3), cleaning the test row
+up afterward regardless of outcome. Every stage appends a `(name, passed, detail)` result rather
+than just trusting "it didn't crash," and prints one clear PASS/FAIL report at the end covering the
+whole run.
+
+**Real bugs found and fixed while writing it, several recurring from earlier this week**: a
+missing `await` on `run_daily_briefing_job` (the exact same class of bug caught multiple times in
+`briefing_service.py`/`openai_service.py` earlier this week — silently creates a coroutine that
+never runs); `JobRun.job` instead of the model's actual `job_name` field; and a genuine
+logic-ordering bug invisible to any tool — the final PASS/FAIL report was originally being printed
+*before* Step 3 had even run, meaning Step 3's result silently never made it into the summary at
+all, and "All checks passed" could print as true even if Step 3 later failed. Also recurring: the
+same session-lifecycle bug from `briefing_service.py`'s first draft — cleanup code sitting outside
+the `with SessionLocal()` block that owned the session it was trying to use.
+
+**A genuinely valuable finding from actually running it, not a bug in the pipeline being
+tested**: the first live run happened to land on a Saturday. Steps 1-2 passed cleanly (real
+`JobRun` success, real `UserBriefing` created, correct date, a real generated headline). Step 3
+reported `FAIL` — the test token was never deactivated — but tracing it back, that's because
+`send_daily_notifications` correctly skipped the entire send step, exactly per its weekend-skip
+design; the token was never touched because nothing ever tried to reach it. The real gap is in the
+*script*, not the system: Step 3's check unconditionally expects deactivation, with no awareness
+that weekends are supposed to behave differently. Rather than fix the check or burn another round
+of real FMP/OpenAI cost re-running the whole thing same-day just to watch a weekday behavior that's
+already been independently confirmed twice this week (once in `send_push_notifications`'s own
+standalone test, once during M21's full live verification), the decision was to defer a full clean
+pass to an actual weekday — scheduled 2026-08-17 — rather than spend more to re-prove something
+already known.
 
 ### Milestone 21 — Personalized Notifications (backend scope complete, 2026-08-14)
 
@@ -1772,14 +1837,15 @@ EXPO_PUBLIC_API_BASE_URL
 
 ## Next Steps
 
-*(Rewritten 2026-08-09, updated 2026-08-10, updated 2026-08-11 (twice), updated again 2026-08-14 —
-Milestone 21's backend scope completed and live-verified today; item 1 from the previous version
-of this list is done, described in the Milestone 21 write-up above.)*
+*(Rewritten 2026-08-09, updated 2026-08-10, updated 2026-08-11 (twice), updated 2026-08-14, updated
+again 2026-08-15 — Milestone 22 is in progress, not yet complete; item 1 below is now specifically
+about finishing it, not starting it.)*
 
-1. **PRIORITY when resuming: Milestone 22 — Backend Integration Test Pass.** Per `docs/08` §12:
-   end-to-end verification of the full new pipeline. Milestones 12-21 are all complete
-   (Milestone 21's mobile counterpart intentionally deferred to Milestones 27-40, not outstanding
-   work being skipped).
+1. **PRIORITY when resuming: finish Milestone 22.** `backend/scripts/integration_check.py` is
+   built and already showed Steps 1-2 passing cleanly on a real (Saturday) run. What's left is one
+   more run on an actual weekday — scheduled 2026-08-17 — to confirm Step 3's real notification
+   deactivation, the one path a weekend run can't exercise by design. Once that passes, formally
+   check off Milestone 22 above and move to Milestone 23.
 2. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
 3. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12

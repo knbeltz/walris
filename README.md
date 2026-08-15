@@ -53,5 +53,6 @@ generation, the daily briefing orchestrator tying it all together with per-run t
 personalized briefing API endpoint, and the backend half of personalized push notifications,
 verified end-to-end against live APIs, the live OpenAI API, the live Expo push API, and the live
 database). Milestone 21's mobile registration flow is deliberately deferred to the Mobile App
-phase. Milestone 22 (Backend Integration Test Pass) is next. See `docs/05-resume-prompt.md` for
-the current milestone and next steps.
+phase. Milestone 22 (Backend Integration Test Pass) is in progress — a reusable integration script
+already confirms most of the pipeline works end to end; one more weekday run is needed to close it
+out. See `docs/05-resume-prompt.md` for the current milestone and next steps.
