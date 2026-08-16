@@ -1,6 +1,7 @@
+import secrets
 from typing import Any
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi_clerk_auth import ClerkConfig, ClerkHTTPBearer
 from sqlalchemy.orm import Session
 
@@ -50,3 +51,21 @@ def get_current_user(
         db.commit()
 
     return user
+
+def verify_admin_secret(
+    x_admin_secret: str | None = Header(default=None),
+) -> None:
+    if not isinstance(x_admin_secret, str) or not x_admin_secret:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Admin is missing from the session token",
+        )
+
+    if not secrets.compare_digest(
+        x_admin_secret,
+        settings.admin_secret,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid admin secret",
+        )

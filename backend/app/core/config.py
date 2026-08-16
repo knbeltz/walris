@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     clerk_secret_key: str
     clerk_jwks_url: str
     openai_api_key: str
+    admin_secret: str
 
 
 settings = Settings()
