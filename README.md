@@ -55,4 +55,8 @@ verified end-to-end against live APIs, the live OpenAI API, the live Expo push A
 database). Milestone 21's mobile registration flow is deliberately deferred to the Mobile App
 phase. Milestone 22 (Backend Integration Test Pass) is in progress — a reusable integration script
 already confirms most of the pipeline works end to end; one more weekday run is needed to close it
-out. See `docs/05-resume-prompt.md` for the current milestone and next steps.
+out. Milestone 23 (Scheduled Personalization Job) has also begun in parallel — the two
+admin-triggered endpoints a future hosted cron will call are built, guarded by a constant-time
+admin-secret check, and verified locally; wiring a live cron schedule is deferred until the backend
+has a real deployment (Milestone 42) to point one at. See `docs/05-resume-prompt.md` for the
+current milestone and next steps.
