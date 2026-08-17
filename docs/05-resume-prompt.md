@@ -1,13 +1,15 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-08-16 (Milestone 22 — Backend Integration Test Pass — still in progress, not
-yet formally signed off; a clean full pass including Step 3's real notification deactivation still
-needs a weekday run, deliberately deferred to 2026-08-17. In parallel, Milestone 23 — Scheduled
-Personalization Job — has begun: admin-secret auth and both `/v1/admin/trigger-briefing`/
-`/v1/admin/trigger-notifications` endpoints are built, correctly guarded, and verified locally;
-actually wiring a live hosted-cron schedule against them is deferred until the backend has a real
-deployment to point at, per Milestone 42.)
+**Last Updated:** 2026-08-17 (Milestones 22 and 23 both closed today. A single real weekday run —
+`POST /v1/admin/trigger-briefing` then `POST /v1/admin/trigger-notifications`, sent as real HTTP
+requests against a locally running server with the correct `X-Admin-Secret` header, using a
+throwaway device token attached to a real user — produced a real successful `JobRun`, a real
+5-section `UserBriefing`, and confirmed real deactivation of that throwaway token. That closes M22's
+last outstanding check (real weekday notification deactivation) and proves both of M23's admin
+endpoints work end to end over real HTTP, not just against a local test client. Live hosted-cron
+scheduling itself remains deferred to Milestone 42, once the backend has a real deployment to point
+one at.)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -76,29 +78,27 @@ concurrently, deactivating any token Expo reports as no longer registered. Delib
 backend only — the mobile side (requesting notification permission, obtaining the Expo push token,
 calling the new registration endpoint) is real work but belongs to the Mobile App phase
 (Milestones 27-40), not this one, and there's no way to test "does a real device actually receive
-this" without it existing yet. **Milestone 22 (Backend Integration Test Pass) is in progress** —
+this" without it existing yet. **Milestone 22 (Backend Integration Test Pass) is complete** —
 `backend/scripts/integration_check.py`, a real reusable script (not a one-off, per the same
 reasoning Milestone 11 used for building a permanent `pytest` suite instead of a throwaway check)
 that runs the actual daily pipeline (`run_daily_briefing_job`) end to end, reads the result back
 through the real API endpoint (`get_todays_briefing`, called directly rather than over HTTP, since
 the script has no real Clerk session token), then exercises the notification send
 (`send_daily_notifications`) against a throwaway test device token, reporting a clear PASS/FAIL per
-stage rather than just "the script didn't crash." Run for real on a Saturday: Steps 1-2 passed
-cleanly (real `JobRun` success, real `UserBriefing` created, correct date, a real generated
-headline), and Step 3 correctly did *not* deactivate the test token — because `send_daily_notifications`
-is designed to skip weekends entirely, so nothing was ever sent to check. That's the system working
-exactly as intended, not a failure; the script itself just doesn't yet know to expect that
-difference on a weekend. A full clean pass including real deactivation needs a weekday run,
-deliberately deferred to 2026-08-17 rather than spending another round of real FMP/OpenAI cost
-same-day to prove something already independently confirmed twice earlier in the week. **Milestone
-23 (Scheduled Personalization Job) has also begun, in parallel** — per `docs/03`'s M23 scope, the
-goal is automating the daily pipeline so it runs without manual intervention. Scoped deliberately
-this pass to build-and-verify-locally only, since the backend has no live deployment yet to point a
-real cron schedule at: `verify_admin_secret` (constant-time admin-secret auth) and both
-`POST /v1/admin/trigger-briefing`/`POST /v1/admin/trigger-notifications` routes are built, wired,
-and verified against a local test client — see the write-up below, including a real stale-date bug
-(the trigger date was being computed once at import time instead of per request) caught and fixed
-along the way.
+stage rather than just "the script didn't crash." A Saturday run confirmed Steps 1-2 cleanly and
+confirmed the weekend-skip design was working as intended, not broken. The one remaining
+check — real weekday notification deactivation — was finally confirmed live on 2026-08-17, not by
+re-running the script itself but through M23's own new admin endpoints (see below), closing M22 out
+for real. **Milestone 23 (Scheduled Personalization Job) is complete for its current scope** — per
+`docs/03`'s M23 scope, the goal is automating the daily pipeline so it runs without manual
+intervention. Deliberately scoped to build-and-verify only, since the backend has no live
+deployment yet to point a real cron schedule at: `verify_admin_secret` (constant-time admin-secret
+auth) and both `POST /v1/admin/trigger-briefing`/`POST /v1/admin/trigger-notifications` routes are
+built, wired, and now verified against a real running server over real HTTP — a real
+`X-Admin-Secret` header, a real pipeline run, and a real confirmed device-token deactivation, not
+just a local test client. Live hosted-cron scheduling itself is still deferred to Milestone 42 —
+see the write-up below, including a real stale-date bug (the trigger date was being computed once
+at import time instead of per request) caught and fixed along the way.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -132,29 +132,30 @@ along the way.
   2026-08-11 — see notes below)
 - [x] **Milestone 21 — Personalized Notifications** (backend scope complete and verified live
   2026-08-14 — mobile registration UI deferred to Milestones 27-40 — see notes below)
-- [ ] Milestone 22 — Backend Integration Test Pass (in progress — script built, weekend behavior
-  verified correct; full weekday pass scheduled 2026-08-17 — see notes below)
-- [ ] Milestone 23 — Scheduled Personalization Job (in progress — admin auth and both trigger
-  endpoints built and verified locally; live hosted-cron wiring deferred to Milestone 42 — see
-  notes below)
+- [x] **Milestone 22 — Backend Integration Test Pass** (weekend behavior confirmed 2026-08-15;
+  real weekday notification deactivation confirmed live 2026-08-17 — see notes below)
+- [x] **Milestone 23 — Scheduled Personalization Job** (admin auth and both trigger endpoints
+  built and verified live over real HTTP, 2026-08-17; live hosted-cron wiring itself deferred to
+  Milestone 42, once there's a real deployment to point one at — see notes below)
 - [ ] Milestones 24–34 — Mobile App (Part 3)
 - [ ] Milestones 35–50 — Notifications, QA, Deployment & Launch (Part 4)
 
 ## Current Milestone
 
-**Milestones 22 and 23 are both open in parallel.** Milestone 22 — Backend Integration Test Pass
-(in progress): Milestones 12–21 are all complete (Milestone 21's mobile counterpart intentionally
-deferred, not a gap). Per `docs/08` §12: end-to-end verification of the full new pipeline.
-`backend/scripts/integration_check.py` is written, reviewed, and mostly verified live — see the
-write-up below. What's left: one more run on a real weekday (scheduled 2026-08-17) to confirm the
-notification-send step's real deactivation path, the one piece a Saturday run can't exercise by
-design.
+**Milestones 12 through 23 are all complete — Part 2 (Core Backend) is fully closed out.** Per
+`docs/03`, that's the entire personalization pivot's backend build: accounts and auth, category/
+topic selection, the FRED/FMP/Marketaux fetch services, the fetch-filter-persist-cleanup pipeline,
+per-user OpenAI generation, the daily orchestrator, the personalized briefing API, personalized
+notifications (backend scope), a full integration test pass, and the admin-triggered automation
+surface M23 needed. See the M22/M23 write-ups below for exactly how both closed on 2026-08-17, in
+one combined live run rather than two separate ones.
 
-Milestone 23 — Scheduled Personalization Job (in progress): per `docs/03`'s M23 scope, automate the
-daily pipeline so it runs without manual intervention. Scoped deliberately this pass to
-build-and-verify-locally only — the backend has no live deployment yet, so an actual hosted-cron
-schedule can't point at anything real until Milestone 42. Admin-secret auth and both trigger
-endpoints are done and locally verified — see the write-up below.
+**Next up is Milestone 24 — Mobile API Client**, the start of Part 3 (Mobile App, M24–34). Per
+`docs/02` §13/§14 and `docs/08` §3/§10: a base fetch wrapper with an environment-based API URL,
+request/error/timeout handling, and — the one real addition this pivot requires over the original
+scope — attaching the signed-in user's Clerk session token (`useAuth()`'s `getToken()`) as an
+`Authorization: Bearer` header on every request, since nearly everything is per-user now. Not yet
+started.
 
 **Milestone 14's core flow is verified end-to-end on a real device** — sign-up → `/category` →
 `/topics` → `/` all confirmed working against the live database. Two smaller pieces of M14 are
@@ -162,7 +163,7 @@ still outstanding (name field, settings screen — see M14 notes below), but the
 longer blocked. The personalization pivot is fully planned in
 `docs/08-personalization-pivot-plan.md`.
 
-### Milestone 23 — Scheduled Personalization Job (in progress, started 2026-08-16)
+### Milestone 23 — Scheduled Personalization Job (complete for current scope, 2026-08-16–17)
 
 Per `docs/03`'s M23 scope: automate the daily pipeline (M15–19) so it runs without manual
 intervention. Scoped deliberately, before writing any code: the backend has no live deployment
@@ -212,19 +213,30 @@ is — a manual verification tool, not the production trigger.
   computed fresh on every call; re-verified the same simulation now returns the correct date across
   a simulated day boundary.
 
-**Verified locally, not yet against a live schedule:**
+**Verified locally first, then for real over real HTTP:**
 - All four `verify_admin_secret` cases tested directly against a throwaway FastAPI route: missing
   header, empty header, and wrong secret all return `401`; the correct secret returns `200`.
 - Both routes confirmed registered at their expected paths (`/v1/admin/trigger-briefing`,
   `/v1/admin/trigger-notifications`) via the running app's own OpenAPI schema.
 - The stale-date bug reproduced live, then disproven live after the fix, as described above.
 
-**Deliberately not done yet, and not a gap**: no hosted cron actually points at these endpoints —
-there's nowhere public to point one at until Milestone 42 (Production Backend Deployment). M23
-closes, for now, as "the automation surface is built and correct"; the schedule itself is real
-future work, not an oversight.
+**Closed 2026-08-17, combined with M22's own remaining check into a single real run** (deliberately,
+to avoid triggering the real pipeline twice in one day): with the backend running locally and a
+throwaway device token attached to a real user, sent a real `POST /v1/admin/trigger-briefing` with
+the correct `X-Admin-Secret` header — `200`, and a real `JobRun` (`status="success"`) plus a real
+5-section `UserBriefing` for 2026-08-17 landed in the database, confirmed by direct query, not just
+the HTTP response. Then, since it was a genuine weekday, sent a real
+`POST /v1/admin/trigger-notifications` the same way — `200`, and the throwaway token's `is_active`
+flipped from `True` to `False`, confirmed by direct query. Cleaned up the throwaway token
+afterward. This proves both admin endpoints work end to end over real HTTP with real auth, not just
+against a local test client — and doubles as M22's final missing piece (see below).
 
-### Milestone 22 — Backend Integration Test Pass (in progress, started 2026-08-15)
+**Still deliberately not done, and not a gap**: no hosted cron actually points at these endpoints —
+there's nowhere public to point one at until Milestone 42 (Production Backend Deployment). The
+automation *surface* is done and proven; the actual schedule is real future work tied to
+deployment, not an oversight.
+
+### Milestone 22 — Backend Integration Test Pass (complete, 2026-08-15–17)
 
 Per `docs/08` §12: end-to-end verification of the full new pipeline. Unlike every prior
 verification this week (all one-off `python -c` scripts, run once and discarded), this one is
@@ -269,6 +281,17 @@ already been independently confirmed twice this week (once in `send_push_notific
 standalone test, once during M21's full live verification), the decision was to defer a full clean
 pass to an actual weekday — scheduled 2026-08-17 — rather than spend more to re-prove something
 already known.
+
+**Closed 2026-08-17, but not by re-running `integration_check.py` itself.** By the time the
+scheduled weekday arrived, M23's admin endpoints existed and could exercise the exact same
+pipeline for real over real HTTP — so rather than run the script a second time and spend another
+round of real FMP/OpenAI cost, the weekday check was done through `POST /v1/admin/trigger-briefing`
+then `POST /v1/admin/trigger-notifications` (see M23's write-up above for the full detail). Same
+throwaway-device-token technique the script itself uses; same real result the script was built to
+confirm: the token's `is_active` flipped from `True` to `False`, a real Expo send attempt against a
+real weekday, exactly the one thing a Saturday run couldn't exercise. `integration_check.py` itself
+remains available as a standing, reusable check for future regressions — it just wasn't the tool
+that closed this particular milestone.
 
 ### Milestone 21 — Personalized Notifications (backend scope complete, 2026-08-14)
 

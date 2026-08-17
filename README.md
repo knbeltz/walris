@@ -46,17 +46,15 @@ Full documentation lives in [`docs/`](docs/):
 
 ## Status
 
-In active development. Milestones 1-21 are complete (backend foundation, Supabase, CI, user
-accounts via Clerk, category/topic selection, the FRED/Marketaux fetch services, a full
-fetch-filter-persist-cleanup pipeline for daily market/news data, per-user OpenAI briefing
-generation, the daily briefing orchestrator tying it all together with per-run tracking, the
-personalized briefing API endpoint, and the backend half of personalized push notifications,
-verified end-to-end against live APIs, the live OpenAI API, the live Expo push API, and the live
-database). Milestone 21's mobile registration flow is deliberately deferred to the Mobile App
-phase. Milestone 22 (Backend Integration Test Pass) is in progress — a reusable integration script
-already confirms most of the pipeline works end to end; one more weekday run is needed to close it
-out. Milestone 23 (Scheduled Personalization Job) has also begun in parallel — the two
-admin-triggered endpoints a future hosted cron will call are built, guarded by a constant-time
-admin-secret check, and verified locally; wiring a live cron schedule is deferred until the backend
-has a real deployment (Milestone 42) to point one at. See `docs/05-resume-prompt.md` for the
-current milestone and next steps.
+In active development. **Milestones 1-23 are complete** — the entire backend build for the
+personalization pivot: backend foundation, Supabase, CI, user accounts via Clerk, category/topic
+selection, the FRED/Marketaux fetch services, a full fetch-filter-persist-cleanup pipeline for
+daily market/news data, per-user OpenAI briefing generation, the daily briefing orchestrator tying
+it all together with per-run tracking, the personalized briefing API endpoint, personalized push
+notifications, a full integration test pass, and an admin-triggered automation surface for the
+daily jobs — all verified end-to-end against live APIs, the live OpenAI API, the live Expo push
+API, and the live database, including a real weekday run on 2026-08-17 confirming real notification
+deactivation. Milestone 21's mobile registration flow is deliberately deferred to the Mobile App
+phase. Wiring M23's admin endpoints to an actual hosted cron schedule is deferred to Milestone 42,
+once the backend has a real deployment to point one at. Next up: Milestone 24, the start of the
+Mobile App phase. See `docs/05-resume-prompt.md` for the current milestone and next steps.
