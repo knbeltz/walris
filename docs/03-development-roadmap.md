@@ -799,11 +799,57 @@ document.
 
 ## Milestone 24 — Mobile API Client
 
-Base fetch wrapper, environment-based API URL, request/error/timeout handling — same shape as the
-original Milestone 27, plus one addition the personalization pivot requires: nearly every endpoint
-is now per-user, so authenticated requests need the signed-in user's Clerk session token (via
-`useAuth()`'s `getToken()`) attached as an `Authorization: Bearer` header. No external API keys
-live in the mobile app.
+### Objective
+
+Give the mobile app one shared, authenticated fetch wrapper instead of each screen hand-rolling its
+own `fetch` call — same shape as the original Milestone 27, plus one addition the personalization
+pivot requires: nearly every endpoint is now per-user, so authenticated requests need the
+signed-in user's Clerk session token attached as an `Authorization: Bearer` header.
+
+### Deliverables
+
+A base API client (e.g. `mobile/lib/apiClient.ts`) that:
+
+- Reads `EXPO_PUBLIC_API_BASE_URL` once, in one place, instead of every call site checking
+  `process.env.EXPO_PUBLIC_API_BASE_URL` itself (as `(onboarding)/category.tsx` and
+  `(onboarding)/topics.tsx` currently do).
+- Accepts a Clerk `getToken()` result (from `useAuth()`, `@clerk/expo`) and attaches it as
+  `Authorization: Bearer <token>` for endpoints that need it — every `/v1/users/me/*` and
+  `/v1/notifications/*` route, per `backend/app/routers/__init__.py`. `GET /health` stays
+  unauthenticated.
+- Applies a request timeout (`AbortController`) so a hung backend doesn't hang the UI forever.
+- Normalizes non-OK responses into a single thrown error shape the caller can branch on, replacing
+  the ad hoc `if (!response.ok) throw new Error(...)` repeated per call site.
+- Holds no external API keys (FMP/FRED/Marketaux/OpenAI/admin secret) — those stay backend-only.
+
+Existing ad hoc fetch call sites (`useHealthCheck.ts`, the onboarding screens' category/topics
+submit handlers) get migrated onto the new client so there's one fetch path, not two.
+
+### Acceptance Criteria
+
+- A signed-in request made through the client reaches a `/v1/users/me/*` route and the backend's
+  Clerk auth dependency accepts the attached token (verified against the real running backend, not
+  mocked).
+- An expired/missing/invalid token produces the same normalized error shape as any other failed
+  request — no unhandled promise rejection.
+- A request against a deliberately unreachable backend times out instead of hanging.
+- `useHealthCheck.ts` and the onboarding screens' submit calls are migrated onto the shared client
+  and still work end-to-end on a physical device against the real backend.
+
+### Definition of Done
+
+Every mobile network call — authenticated or not — goes through one client, and no screen
+constructs its own `Authorization` header or reads `EXPO_PUBLIC_API_BASE_URL` directly.
+
+### Suggested Commit
+
+`feat: add authenticated mobile API client`
+
+### Claude Code Tutor Prompt
+
+> Help me build a shared, authenticated fetch wrapper for the Walris mobile app. Explain how to
+> attach a Clerk session token to outgoing requests and how to normalize errors so every screen can
+> handle them the same way.
 
 ## Milestone 25 — Frontend Response Schemas
 
