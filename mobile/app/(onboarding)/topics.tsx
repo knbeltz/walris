@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { TopicChips } from '@/components/ui/select-chips';
 import { getErrorMessage } from '@/lib/utils';
+import { apiFetch, ApiError } from '@/lib/apiClient';
+
 
 type UserPreferences = {
   category: string | null;
@@ -62,13 +64,11 @@ export default function TopicsScreen() {
         throw new Error('Your session could not be verified.');
       }
 
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_API_BASE_URL}/v1/users/me/preferences`,
+      const response = await apiFetch(
+        '/v1/users/me/preferences',
+        getToken,
         {
           method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
         }
       );
 
@@ -76,10 +76,6 @@ export default function TopicsScreen() {
         throw new Error(
           'Your session has expired. Please sign in again.'
         );
-      }
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch preferences.');
       }
 
       const data: UserPreferences = await response.json();

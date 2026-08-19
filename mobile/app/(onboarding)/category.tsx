@@ -7,6 +7,8 @@ import { SelectCard } from '@/components/ui/select-card';
 import type { SelectCardOption } from '@/components/ui/select-card';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
+import { apiFetch, ApiError } from '@/lib/apiClient';
+
 
 const categories: SelectCardOption[] = [
   {
@@ -75,24 +77,16 @@ export default function CategorySelectionScreen() {
             return;
         }
 
-        if (!process.env.EXPO_PUBLIC_API_BASE_URL) {
-            setErrorMessage('The API URL is not configured.')
-        }
 
         try {
-            // Request the JWT for the currently active Clerk session.
-            const token = await getToken();
+    
 
-            if (!token) {
-                throw new Error('You must be signed in to continue.')
-            }
-
-        const response = await fetch(
-            `${process.env.EXPO_PUBLIC_API_BASE_URL}/v1/users/me/preferences`,
+        const response = await apiFetch(
+            '/v1/users/me/preferences',
+            getToken,
             {
                 method: 'Put',
                 headers: {
-                    Authorization: `Bearer ${token}`,
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
@@ -101,15 +95,6 @@ export default function CategorySelectionScreen() {
                 }),
             },
         );
-
-        
-        if (!response.ok) {
-            const errorBody = await response.json().catch(() => null);
-
-            throw new Error(
-                errorBody?.detail ?? 'Failed to save your preferences.',
-            );
-        }
 
         router.push('/topics');
     }   catch (error: unknown) {
