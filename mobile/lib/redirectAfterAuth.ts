@@ -6,12 +6,21 @@ export async function redirectAfterAuth(
 ) {
     try {
 
-        const token = await getToken();
+        let token: string | null = null;
+
+        for (let attempt = 0; attempt < 3; attempt ++) {
+            token = await getToken();
+
+            if (token) {
+                break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 200))
+        }    
 
         if (!token) {
-            throw new Error('Your session could not be verified');
-    }
-         const response = await fetch(
+            throw new Error('Your session could not be verified.')
+        }
+        const response = await fetch(
         `${process.env.EXPO_PUBLIC_API_BASE_URL}/v1/users/me/preferences`,
         {
             method: 'GET',
