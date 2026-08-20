@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiFetch, ApiError } from '@/lib/apiClient';
-
+import { apiFetch } from '@/lib/apiClient';
 
 export interface HealthResponse {
   status: string;

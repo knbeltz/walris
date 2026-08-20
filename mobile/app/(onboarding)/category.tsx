@@ -7,131 +7,125 @@ import { SelectCard } from '@/components/ui/select-card';
 import type { SelectCardOption } from '@/components/ui/select-card';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
-import { apiFetch, ApiError } from '@/lib/apiClient';
-
+import { apiFetch } from '@/lib/apiClient';
 
 const categories: SelectCardOption[] = [
   {
     value: 'investor',
     label: 'Investor',
-    description: "Get a daily read on where the economy is headed and what it means for markets and your portfolio. Includes index performance, sector movers, and the data behind them.",
+    description:
+      'Get a daily read on where the economy is headed and what it means for markets and your portfolio. Includes index performance, sector movers, and the data behind them.',
   },
 
   {
     value: 'small_business_owner',
     label: 'Small Business Owners / Entrepreneur',
-    description: "Track the conditions that affect your business: costs, consumer demand, hiring, and financing to know what's getting easier or harder.",
+    description:
+      "Track the conditions that affect your business: costs, consumer demand, hiring, and financing to know what's getting easier or harder.",
   },
 
   {
     value: 'consumer',
     label: 'Consumer',
-    description: "Understand what's happening to your cost of living, income, and purchasing power, in plain terms.",
+    description:
+      "Understand what's happening to your cost of living, income, and purchasing power, in plain terms.",
   },
 
   {
     value: 'student',
     label: 'Student',
-    description: 'See what the economy means for your living costs, student loans, and job prospects after graduation.',
+    description:
+      'See what the economy means for your living costs, student loans, and job prospects after graduation.',
   },
 
   {
     value: 'home',
     label: 'Home Owner / Home Buyer',
-    description: 'Stay on top of mortgage rates, home prices, and housing supply to know whether now favors buying, selling, or waiting.',
+    description:
+      'Stay on top of mortgage rates, home prices, and housing supply to know whether now favors buying, selling, or waiting.',
   },
 
   {
     value: 'job_seeker',
     label: 'Job Seeker',
-    description: 'Know whether hiring is heating up or cooling down, where opportunities are emerging, and how much leverage workers have right now',
+    description:
+      'Know whether hiring is heating up or cooling down, where opportunities are emerging, and how much leverage workers have right now',
   },
 
   {
     value: 'everything',
     label: '"I want everything"',
-    description: 'Get the full picture — inflation, jobs, housing, business activity, interest rates, and markets, all in one daily briefing.',
+    description:
+      'Get the full picture — inflation, jobs, housing, business activity, interest rates, and markets, all in one daily briefing.',
   },
-
 ];
 
 export default function CategorySelectionScreen() {
-    // Store the value of the category currently selected by the user.
+  // Store the value of the category currently selected by the user.
 
-    const { getToken } = useAuth();
+  const { getToken } = useAuth();
 
-    const router = useRouter();
+  const router = useRouter();
 
-    // The initial value is null because no category has been selected yet/
-    const [selectedCategory, setSelectedCategory] =
-        useState<string | null>(null);
+  // The initial value is null because no category has been selected yet/
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-    const [errorMessage, setErrorMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
-    const handleContinue = async () => {
-        // Clear an error left over from a previous attempt. 
-        setErrorMessage('');
-        
-        if (!selectedCategory) {
-            setErrorMessage('Please select a category.');
-            return;
-        }
+  const handleContinue = async () => {
+    // Clear an error left over from a previous attempt.
+    setErrorMessage('');
 
-
-        try {
-    
-
-        const response = await apiFetch(
-            '/v1/users/me/preferences',
-            getToken,
-            {
-                method: 'Put',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    category: selectedCategory,
-                    additional_topics: []
-                }),
-            },
-        );
-
-        router.push('/topics');
-    }   catch (error: unknown) {
-        console.error('Preference submission failed:', error);
-
-        if (error instanceof Error) {
-            setErrorMessage(error.message);
-        } else {
-            setErrorMessage('An unexpected error occured.');
-        }
-        }
+    if (!selectedCategory) {
+      setErrorMessage('Please select a category.');
+      return;
     }
 
-    return(
-        <ScrollView>
-            <SelectCard
-                // The full list of categories the user can choose from.
-                options={categories}
+    try {
+      await apiFetch('/v1/users/me/preferences', getToken, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          category: selectedCategory,
+          additional_topics: [],
+        }),
+      });
 
-                // The category that is currently selected.
-                // SelectCard uses this value to determine which card should appear selected.
-                value={selectedCategory}
+      router.push('/topics');
+    } catch (error: unknown) {
+      console.error('Preference submission failed:', error);
 
-                // SelectCard calls this function whenever the user presses one of the category cards.
+      if (error instanceof Error) {
+        setErrorMessage(error.message);
+      } else {
+        setErrorMessage('An unexpected error occured.');
+      }
+    }
+  };
 
-                // The selected option's value becomes the new state value.
-                onValueChange={setSelectedCategory}
-            />
+  return (
+    <ScrollView>
+      <SelectCard
+        // The full list of categories the user can choose from.
+        options={categories}
 
-            {errorMessage ? <Text>{errorMessage}</Text> : null}
+        // The category that is currently selected.
+        // SelectCard uses this value to determine which card should appear selected.
+        value={selectedCategory}
 
-            <Button
-                onPress={handleContinue}
-                disabled={!selectedCategory}
-            >
-                <Text>Continue</Text>
-            </Button>
-        </ScrollView>
-    );
+        // SelectCard calls this function whenever the user presses one of the category cards.
+
+        // The selected option's value becomes the new state value.
+        onValueChange={setSelectedCategory}
+      />
+
+      {errorMessage ? <Text>{errorMessage}</Text> : null}
+
+      <Button onPress={handleContinue} disabled={!selectedCategory}>
+        <Text>Continue</Text>
+      </Button>
+    </ScrollView>
+  );
 }
