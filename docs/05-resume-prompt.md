@@ -1,15 +1,21 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-08-17 (Milestones 22 and 23 both closed today. A single real weekday run —
-`POST /v1/admin/trigger-briefing` then `POST /v1/admin/trigger-notifications`, sent as real HTTP
-requests against a locally running server with the correct `X-Admin-Secret` header, using a
-throwaway device token attached to a real user — produced a real successful `JobRun`, a real
-5-section `UserBriefing`, and confirmed real deactivation of that throwaway token. That closes M22's
-last outstanding check (real weekday notification deactivation) and proves both of M23's admin
-endpoints work end to end over real HTTP, not just against a local test client. Live hosted-cron
-scheduling itself remains deferred to Milestone 42, once the backend has a real deployment to point
-one at.)
+**Last Updated:** 2026-08-19 (Milestone 24 — Mobile API Client — is in progress, not yet complete.
+`mobile/lib/apiClient.ts` now exists: a shared `apiFetch` with an optional `getToken` param — so
+unauthenticated calls like `GET /health` and authenticated per-user calls share one function
+instead of two — a request timeout via `AbortController`, and every failure (a non-OK response, an
+aborted/timed-out request, a bare network failure) normalized into one `ApiError` shape. It's wired
+into `useHealthCheck.ts` and both onboarding screens' (`category.tsx`, `topics.tsx`) preference
+calls, replacing their ad hoc `fetch` + manual `Authorization` header + manual
+`EXPO_PUBLIC_API_BASE_URL` checks. Along the way, review caught and fixed several real bugs before
+they shipped: a missing leading slash on `/v1/users/me/preferences` in `topics.tsx` that would have
+produced a broken request URL, a catch block that was swallowing real `ApiError`s and relabeling
+them all as timeouts, and a dead `response.status === 401` check that could never fire because
+`apiFetch` already throws before returning on any non-OK response. Lint is clean (no unused
+imports/vars) and everything's Prettier-formatted. **Not yet done:** end-to-end verification against
+the real running backend on a physical device — the acceptance criteria this milestone still needs
+before it can be marked complete.)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -98,7 +104,14 @@ built, wired, and now verified against a real running server over real HTTP — 
 `X-Admin-Secret` header, a real pipeline run, and a real confirmed device-token deactivation, not
 just a local test client. Live hosted-cron scheduling itself is still deferred to Milestone 42 —
 see the write-up below, including a real stale-date bug (the trigger date was being computed once
-at import time instead of per request) caught and fixed along the way.
+at import time instead of per request) caught and fixed along the way. **Milestone 24 (Mobile API
+Client) is in progress, not yet complete** — `mobile/lib/apiClient.ts` provides one shared
+`apiFetch` (optional Clerk `getToken`, request timeout, normalized `ApiError` on any failure) and
+is wired into `useHealthCheck.ts` and the onboarding screens' preference calls, replacing their ad
+hoc `fetch` logic. Real bugs were caught and fixed during review before this shipped (a broken
+request URL, a catch block masking real errors as timeouts, a dead unreachable 401 check) — see the
+write-up below. Still outstanding: verifying the migrated calls end-to-end on a physical device
+against the real backend.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -137,7 +150,10 @@ at import time instead of per request) caught and fixed along the way.
 - [x] **Milestone 23 — Scheduled Personalization Job** (admin auth and both trigger endpoints
   built and verified live over real HTTP, 2026-08-17; live hosted-cron wiring itself deferred to
   Milestone 42, once there's a real deployment to point one at — see notes below)
-- [ ] Milestones 24–34 — Mobile App (Part 3)
+- [~] **Milestone 24 — Mobile API Client** (in progress — `apiClient.ts` built and wired into
+  `useHealthCheck.ts`/onboarding screens; not yet verified end-to-end on a real device — see notes
+  below)
+- [ ] Milestones 25–34 — Mobile App (Part 3, remaining)
 - [ ] Milestones 35–50 — Notifications, QA, Deployment & Launch (Part 4)
 
 ## Current Milestone
@@ -150,18 +166,61 @@ notifications (backend scope), a full integration test pass, and the admin-trigg
 surface M23 needed. See the M22/M23 write-ups below for exactly how both closed on 2026-08-17, in
 one combined live run rather than two separate ones.
 
-**Next up is Milestone 24 — Mobile API Client**, the start of Part 3 (Mobile App, M24–34). Per
+**Milestone 24 — Mobile API Client, the start of Part 3 (Mobile App, M24–34), is in progress.** Per
 `docs/02` §13/§14 and `docs/08` §3/§10: a base fetch wrapper with an environment-based API URL,
 request/error/timeout handling, and — the one real addition this pivot requires over the original
 scope — attaching the signed-in user's Clerk session token (`useAuth()`'s `getToken()`) as an
-`Authorization: Bearer` header on every request, since nearly everything is per-user now. Not yet
-started.
+`Authorization: Bearer` header on every request, since nearly everything is per-user now. See the
+M24 write-up below for what's built and what's still outstanding.
 
 **Milestone 14's core flow is verified end-to-end on a real device** — sign-up → `/category` →
 `/topics` → `/` all confirmed working against the live database. Two smaller pieces of M14 are
 still outstanding (name field, settings screen — see M14 notes below), but the flow itself is no
 longer blocked. The personalization pivot is fully planned in
 `docs/08-personalization-pivot-plan.md`.
+
+### Milestone 24 — Mobile API Client (in progress, started 2026-08-19)
+
+Per `docs/03`'s M24 scope: one shared, authenticated fetch wrapper for the mobile app instead of
+each screen hand-rolling its own `fetch` call, with the one real addition the personalization pivot
+requires — attaching the signed-in user's Clerk session token as an `Authorization: Bearer` header
+on per-user requests.
+
+**What got built:**
+
+- `mobile/lib/apiClient.ts` — `apiFetch(path, getToken?, options?)`:
+  - Reads `EXPO_PUBLIC_API_BASE_URL` once, at module scope, instead of every call site checking
+    `process.env` itself.
+  - `getToken` is optional, so one function serves both unauthenticated calls (`GET /health`) and
+    authenticated per-user calls (`/v1/users/me/*`) — no second client needed. When provided, a
+    missing/expired token throws before the request is even made.
+  - A 10-second request timeout via `AbortController`.
+  - Every failure — a non-OK response, an aborted/timed-out request, or a bare network failure —
+    normalizes into one `ApiError` (with `.status`) instead of leaking whatever raw error type the
+    failure happened to produce.
+- Migrated the existing ad hoc fetch call sites onto it: `useHealthCheck.ts`, and both onboarding
+  screens' preference calls (`category.tsx`'s submit, `topics.tsx`'s fetch-on-mount and submit).
+
+**Bugs caught and fixed during review, before any of this shipped:**
+
+- `topics.tsx`'s submit handler was missing the leading slash on `/v1/users/me/preferences` —
+  would have produced a broken concatenated URL (`{base}v1/users/me/preferences`) against the real
+  backend.
+- An early version of `apiClient.ts`'s `catch` block caught everything unconditionally, including
+  the `ApiError` thrown for a real failed response — a 404 or 500 would've been swallowed and
+  relabeled as a generic timeout message, losing the real status/detail.
+- `topics.tsx` had a `response.status === 401` check that could never fire, since `apiFetch` already
+  throws before returning on any non-OK response — dead code masking what was actually unreachable.
+- Cleanup: an unused `ApiError` import in all three migrated files, an unused `response` variable
+  in `category.tsx`, redundant manual `getToken()`/null-checks now handled inside `apiFetch`
+  itself, and a `'Put'` method-casing typo.
+
+**Still outstanding before this milestone is complete:**
+
+- End-to-end verification on a physical device against the real running backend: a signed-in
+  request actually reaching `/v1/users/me/*` and being accepted, an expired/missing token producing
+  the normalized error (not an unhandled rejection), and a deliberately unreachable backend timing
+  out instead of hanging.
 
 ### Milestone 23 — Scheduled Personalization Job (complete for current scope, 2026-08-16–17)
 
@@ -1856,6 +1915,19 @@ walris/
 - **`backend/app/schemas/economic_event.py` (`EconomicEvent`) is unused dead weight** from the
   abandoned Finnhub/calendar scope — not yet deleted; decide when the `fmp_service.py` rewrite
   happens.
+- **`redirectAfterAuth` gets called twice on sign-up, and the duplicate can lose a timing race**
+  (found 2026-08-19 during M24 device verification, not fixed yet — planned for 2026-08-20).
+  `app/(auth)/sign-up.tsx` calls `redirectAfterAuth(getToken, router)` both explicitly inside
+  `signUp.finalize()`'s `navigate` callback (line 120) and again via a `useEffect` watching
+  `isSignedIn` (lines 21-25). `isSignedIn` can flip `true` slightly before `getToken()` is actually
+  able to return a token, so the `useEffect`'s copy loses that race, `getToken()` returns `null`,
+  and `redirectAfterAuth.ts:11-12` throws "Your session could not be verified." The `catch` block
+  swallows it and falls back to `router.replace('/category')`, so the user still lands correctly
+  (confirmed live: category → topics screens both worked fine after the error) — but it's a
+  spurious console error and a wasted duplicate network request on every sign-up/sign-in. Likely
+  fix: drop the redundant `useEffect` (the explicit `navigate`-callback call already covers it), or
+  have `redirectAfterAuth` retry/wait briefly instead of failing immediately when `getToken()`
+  returns null right after a session is created.
 
 ## Commands
 
@@ -1943,14 +2015,15 @@ EXPO_PUBLIC_API_BASE_URL
 ## Next Steps
 
 *(Rewritten 2026-08-09, updated 2026-08-10, updated 2026-08-11 (twice), updated 2026-08-14, updated
-again 2026-08-15 — Milestone 22 is in progress, not yet complete; item 1 below is now specifically
-about finishing it, not starting it.)*
+2026-08-15, updated 2026-08-17 (M22/M23 both closed), updated again 2026-08-19 — Milestone 24 is in
+progress, not yet complete; item 1 below is now specifically about finishing it.)*
 
-1. **PRIORITY when resuming: finish Milestone 22.** `backend/scripts/integration_check.py` is
-   built and already showed Steps 1-2 passing cleanly on a real (Saturday) run. What's left is one
-   more run on an actual weekday — scheduled 2026-08-17 — to confirm Step 3's real notification
-   deactivation, the one path a weekend run can't exercise by design. Once that passes, formally
-   check off Milestone 22 above and move to Milestone 23.
+1. **PRIORITY when resuming: finish Milestone 24.** `apiClient.ts` is built and wired into
+   `useHealthCheck.ts` and both onboarding screens. What's left is end-to-end verification on a
+   physical device against the real running backend — signed-in requests succeeding, a bad/expired
+   token producing the normalized `ApiError`, and a killed backend producing the "unable to
+   connect" error instead of hanging. Once that passes, formally check off Milestone 24 above and
+   move to Milestone 25 (Frontend Response Schemas).
 2. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
 3. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12
@@ -1966,8 +2039,3 @@ about finishing it, not starting it.)*
    which "few sections" to write doesn't guarantee every opted-in topic actually shows up in the
    output. Worth revisiting whether the developer message needs to require covering every topic
    area, or whether letting the model choose is the intended behavior.
-7. Once Milestone 22 is complete, revisit and re-scope `docs/03-development-roadmap.md`'s
-   Milestones 27+ (Mobile App, Notifications) against the personalization pivot before starting
-   them — those sections still assume no-auth/single-global-briefing, and Milestone 21's deferred
-   mobile registration flow (permission request, Expo push token, calling
-   `POST /v1/notifications/register`) belongs somewhere in that re-scoped range.

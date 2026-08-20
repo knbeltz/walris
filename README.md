@@ -57,6 +57,7 @@ API, and the live database, including a real weekday run on 2026-08-17 confirmin
 deactivation. Milestone 21's mobile registration flow is deliberately deferred to the Mobile App
 phase. Wiring M23's admin endpoints to an actual hosted cron schedule is deferred to Milestone 42,
 once the backend has a real deployment to point one at. **Milestone 24 (Mobile API Client, the
-start of the Mobile App phase) is in progress and incomplete** — a draft shared fetch wrapper
-(`mobile/lib/apiClient.ts`) exists but isn't exported/wired up yet. See `docs/05-resume-prompt.md`
-for the current milestone and next steps.
+start of the Mobile App phase) is in progress and incomplete** — a shared, authenticated fetch
+wrapper (`mobile/lib/apiClient.ts`) is built and wired into `useHealthCheck.ts` and the onboarding
+screens, replacing their ad hoc fetch calls, but it hasn't been verified end-to-end on a real
+device yet. See `docs/05-resume-prompt.md` for the current milestone and next steps.
