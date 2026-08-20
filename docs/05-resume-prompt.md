@@ -1,21 +1,23 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-08-19 (Milestone 24 — Mobile API Client — is in progress, not yet complete.
-`mobile/lib/apiClient.ts` now exists: a shared `apiFetch` with an optional `getToken` param — so
-unauthenticated calls like `GET /health` and authenticated per-user calls share one function
-instead of two — a request timeout via `AbortController`, and every failure (a non-OK response, an
-aborted/timed-out request, a bare network failure) normalized into one `ApiError` shape. It's wired
-into `useHealthCheck.ts` and both onboarding screens' (`category.tsx`, `topics.tsx`) preference
-calls, replacing their ad hoc `fetch` + manual `Authorization` header + manual
-`EXPO_PUBLIC_API_BASE_URL` checks. Along the way, review caught and fixed several real bugs before
-they shipped: a missing leading slash on `/v1/users/me/preferences` in `topics.tsx` that would have
-produced a broken request URL, a catch block that was swallowing real `ApiError`s and relabeling
-them all as timeouts, and a dead `response.status === 401` check that could never fire because
-`apiFetch` already throws before returning on any non-OK response. Lint is clean (no unused
-imports/vars) and everything's Prettier-formatted. **Not yet done:** end-to-end verification against
-the real running backend on a physical device — the acceptance criteria this milestone still needs
-before it can be marked complete.)
+**Last Updated:** 2026-08-20 (Milestones 24 and 25 are both complete. M24's `mobile/lib/apiClient.ts`
+was verified end-to-end on a physical device — a real sign-up, a real Clerk-authenticated
+`PUT /v1/users/me/preferences`, and both onboarding screens saving/loading correctly against the
+real running backend. That device pass also surfaced a real, separate bug in `redirectAfterAuth.ts`
+(a duplicate-call race against Clerk's session activation), fixed with a bounded retry — see Known
+Issues, still pending its own on-device confirmation. M25 added `zod` and two schemas
+(`UserBriefingResponseSchema`, `UserPreferencesSchema`) verified against real backend-serialized
+data (not hand-typed fixtures) for every real branch: a found briefing, the no-briefing-yet
+fallback, a user with preferences set, and a fresh signup with `category: null`. Review caught two
+real bugs before they shipped — a `headling`/`heading` typo that would have failed every real
+briefing parse, and `additional_topics` typed as `z.string()` instead of `z.array(z.string())` that
+would have failed every real preferences parse — plus, separately, both onboarding screens were
+initially passing the raw `Response` object into `.parse()` instead of its parsed JSON body, which
+would have failed on every successful request; both are now fixed and reverified. Malformed-input
+rejection was also explicitly tested and confirmed. `UserBriefingResponseSchema` is verified but
+deliberately not wired to a consumer yet — there isn't one until M26's `useTodayBriefing` hook
+exists.)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -105,13 +107,19 @@ built, wired, and now verified against a real running server over real HTTP — 
 just a local test client. Live hosted-cron scheduling itself is still deferred to Milestone 42 —
 see the write-up below, including a real stale-date bug (the trigger date was being computed once
 at import time instead of per request) caught and fixed along the way. **Milestone 24 (Mobile API
-Client) is in progress, not yet complete** — `mobile/lib/apiClient.ts` provides one shared
-`apiFetch` (optional Clerk `getToken`, request timeout, normalized `ApiError` on any failure) and
-is wired into `useHealthCheck.ts` and the onboarding screens' preference calls, replacing their ad
-hoc `fetch` logic. Real bugs were caught and fixed during review before this shipped (a broken
-request URL, a catch block masking real errors as timeouts, a dead unreachable 401 check) — see the
-write-up below. Still outstanding: verifying the migrated calls end-to-end on a physical device
-against the real backend.
+Client) is complete** — `mobile/lib/apiClient.ts` provides one shared `apiFetch` (optional Clerk
+`getToken`, request timeout, normalized `ApiError` on any failure), wired into `useHealthCheck.ts`
+and the onboarding screens' preference calls, replacing their ad hoc `fetch` logic. Verified
+end-to-end on a physical device: real sign-up, real Clerk-authenticated requests reaching
+`/v1/users/me/preferences`, and both onboarding screens saving/loading correctly. That pass also
+surfaced a real, unrelated bug in `redirectAfterAuth.ts` — see Known Issues. **Milestone 25
+(Frontend Response Schemas) is also complete** — `zod` installed, `UserBriefingResponseSchema` and
+`UserPreferencesSchema` added under `mobile/schemas/`, both verified against real backend-serialized
+data (not hand-typed fixtures) for every real branch, and malformed-input rejection explicitly
+confirmed. The preferences schema is wired into both onboarding screens' real `apiFetch` calls; the
+briefing schema is verified but deliberately not wired to a consumer yet, since none exists until
+M26's `useTodayBriefing` hook. See the write-ups below for the real bugs review caught in both
+milestones before they shipped.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -150,10 +158,12 @@ against the real backend.
 - [x] **Milestone 23 — Scheduled Personalization Job** (admin auth and both trigger endpoints
   built and verified live over real HTTP, 2026-08-17; live hosted-cron wiring itself deferred to
   Milestone 42, once there's a real deployment to point one at — see notes below)
-- [~] **Milestone 24 — Mobile API Client** (in progress — `apiClient.ts` built and wired into
-  `useHealthCheck.ts`/onboarding screens; not yet verified end-to-end on a real device — see notes
-  below)
-- [ ] Milestones 25–34 — Mobile App (Part 3, remaining)
+- [x] **Milestone 24 — Mobile API Client** (`apiClient.ts` built, wired into `useHealthCheck.ts`
+  and onboarding screens, verified end-to-end on a physical device 2026-08-20 — see notes below)
+- [x] **Milestone 25 — Frontend Response Schemas** (`zod` added, both schemas verified against real
+  backend data and malformed-input rejection, preferences schema wired into both onboarding
+  screens; briefing schema deliberately left unwired until M26 — see notes below)
+- [ ] Milestones 26–34 — Mobile App (Part 3, remaining)
 - [ ] Milestones 35–50 — Notifications, QA, Deployment & Launch (Part 4)
 
 ## Current Milestone
@@ -166,12 +176,12 @@ notifications (backend scope), a full integration test pass, and the admin-trigg
 surface M23 needed. See the M22/M23 write-ups below for exactly how both closed on 2026-08-17, in
 one combined live run rather than two separate ones.
 
-**Milestone 24 — Mobile API Client, the start of Part 3 (Mobile App, M24–34), is in progress.** Per
-`docs/02` §13/§14 and `docs/08` §3/§10: a base fetch wrapper with an environment-based API URL,
-request/error/timeout handling, and — the one real addition this pivot requires over the original
-scope — attaching the signed-in user's Clerk session token (`useAuth()`'s `getToken()`) as an
-`Authorization: Bearer` header on every request, since nearly everything is per-user now. See the
-M24 write-up below for what's built and what's still outstanding.
+**Milestones 24 and 25, the start of Part 3 (Mobile App, M24–34), are both complete.** M24 built
+the shared `apiClient.ts` fetch wrapper (per `docs/02` §13/§14, `docs/08` §3/§10) and verified it
+end-to-end on a physical device. M25 added Zod schemas for the briefing and preferences responses,
+verified against real backend data. See the M24/M25 write-ups below for what got built and the real
+bugs review caught in both before they shipped. **Next up: Milestone 26 — TanStack Query Hooks**
+(`useTodayBriefing`), not yet started.
 
 **Milestone 14's core flow is verified end-to-end on a real device** — sign-up → `/category` →
 `/topics` → `/` all confirmed working against the live database. Two smaller pieces of M14 are
@@ -179,7 +189,56 @@ still outstanding (name field, settings screen — see M14 notes below), but the
 longer blocked. The personalization pivot is fully planned in
 `docs/08-personalization-pivot-plan.md`.
 
-### Milestone 24 — Mobile API Client (in progress, started 2026-08-19)
+### Milestone 25 — Frontend Response Schemas (complete, 2026-08-20)
+
+Per `docs/03`'s M25 scope: Zod schemas that parse and validate what the backend actually returns
+from `GET /v1/users/me/briefing` and `GET`/`PUT /v1/users/me/preferences`, instead of trusting
+`response.json()`'s `any` type. The original draft of this milestone described schemas for
+structured indicator/news data that doesn't actually exist in the API response yet (see the
+scope-correction note in `docs/03`'s M25 section) — that gap is documented there for a later
+decision, not solved by this milestone.
+
+**What got built:**
+
+- `zod` added as a mobile dependency (wasn't installed before, despite being listed in the README's
+  tech stack).
+- `mobile/schemas/briefings.ts` — `UserBriefingResponseSchema`, matching the real
+  `UserBriefingResponse` Pydantic schema (`date`, `content.headline`, `content.sections[].{heading,
+  body}`).
+- `mobile/schemas/preferences.ts` — `UserPreferencesSchema`, matching the real backend
+  `UserPreferences` schema (`category: string | null`, `additional_topics: string[]`).
+- Both wired into real call sites: `category.tsx` and `topics.tsx` now `.parse()` every
+  `apiFetch` response through the schema before using it, instead of just TypeScript-asserting the
+  shape.
+
+**Verification — real data, not hand-typed fixtures:** rather than guessing at response shapes,
+verification pulled real rows out of the database and serialized them through the backend's actual
+Pydantic response classes (same technique `integration_check.py` used in M22 to sidestep needing a
+real Clerk token) — a real persisted briefing, the real no-briefing-yet fallback (calling the actual
+`get_todays_briefing` function for a date genuinely without a row), a real user's saved preferences,
+and a constructed fresh-signup (`category: null`) case. All four parsed successfully. Four
+deliberately malformed inputs (missing field, wrong type, bad date format, missing key) were also
+confirmed to fail parsing cleanly, closing out that acceptance criterion explicitly.
+
+**Bugs caught and fixed during review, before any of this shipped:**
+
+- A `headling`/`heading` typo in the briefing schema — would have failed every real briefing parse,
+  confirmed by testing against a real response before the fix.
+- `additional_topics` typed as `z.string()` instead of `z.array(z.string())` — would have failed
+  every real preferences parse, same real-response confirmation.
+- Both onboarding screens initially passed the raw `Response` object into `.parse()` instead of its
+  parsed JSON body (`await response.json()`) — would have failed on every successful request, not
+  just malformed ones. Caught in `category.tsx` and `topics.tsx` separately; both fixed and
+  reverified against a real `Response`-shaped object.
+- Minor: a `no-redeclare` naming collision where the inferred TypeScript type reused the exact same
+  name as its own Zod schema const in `preferences.ts`; renamed to `UserPreferences` (and
+  `UserBrefingResponse` → `UserBriefingResponse`, fixing a missing-letter typo) for consistency.
+
+**Deliberately not done:** `UserBriefingResponseSchema` isn't wired to any consumer yet — there's no
+call site fetching `/v1/users/me/briefing` on the mobile side at all until M26's `useTodayBriefing`
+hook exists. Wiring it in now would mean building a throwaway consumer just to prove it works.
+
+### Milestone 24 — Mobile API Client (complete, 2026-08-20)
 
 Per `docs/03`'s M24 scope: one shared, authenticated fetch wrapper for the mobile app instead of
 each screen hand-rolling its own `fetch` call, with the one real addition the personalization pivot
@@ -215,12 +274,20 @@ on per-user requests.
   in `category.tsx`, redundant manual `getToken()`/null-checks now handled inside `apiFetch`
   itself, and a `'Put'` method-casing typo.
 
-**Still outstanding before this milestone is complete:**
+**End-to-end device verification (2026-08-20):** signed up for real on a physical device — a real
+Clerk-authenticated request reached `/v1/users/me/preferences` and was accepted, and both onboarding
+screens saved/loaded correctly against the real running backend. The timeout/network-failure paths
+were separately confirmed via a script exercising `apiClient.ts` itself against the real local
+backend (a genuinely unresponsive server, connection-refused, and a missing/invalid token all
+normalized to `ApiError` correctly, including the real 10-second `AbortController` timeout).
 
-- End-to-end verification on a physical device against the real running backend: a signed-in
-  request actually reaching `/v1/users/me/*` and being accepted, an expired/missing token producing
-  the normalized error (not an unhandled rejection), and a deliberately unreachable backend timing
-  out instead of hanging.
+That same device pass surfaced a real, unrelated bug: `redirectAfterAuth.ts` — called twice on
+sign-up (once explicitly after `signUp.finalize()`, once via a `useEffect` watching `isSignedIn`) —
+threw a false "session could not be verified" because `isSignedIn` can flip `true` slightly before
+`getToken()` is actually able to return a token. Fixed with a bounded retry (3 attempts, 200ms
+between them) rather than removing the `useEffect`, since that effect is also the only thing that
+redirects an already-signed-in user who lands back on `/sign-in`/`/sign-up`. See Known Issues —
+the fix is committed but still needs its own on-device confirmation.
 
 ### Milestone 23 — Scheduled Personalization Job (complete for current scope, 2026-08-16–17)
 
@@ -2015,25 +2082,24 @@ EXPO_PUBLIC_API_BASE_URL
 ## Next Steps
 
 *(Rewritten 2026-08-09, updated 2026-08-10, updated 2026-08-11 (twice), updated 2026-08-14, updated
-2026-08-15, updated 2026-08-17 (M22/M23 both closed), updated again 2026-08-19 — Milestone 24 is in
-progress, not yet complete; item 1 below is now specifically about finishing it.)*
+2026-08-15, updated 2026-08-17 (M22/M23 both closed), updated 2026-08-19, updated again 2026-08-20
+— Milestones 24 and 25 are both closed; item 1 below now points to Milestone 26.)*
 
-1. **PRIORITY when resuming: finish Milestone 24.** `apiClient.ts` is built and wired into
-   `useHealthCheck.ts` and both onboarding screens. What's left is end-to-end verification on a
-   physical device against the real running backend — signed-in requests succeeding, a bad/expired
-   token producing the normalized `ApiError`, and a killed backend producing the "unable to
-   connect" error instead of hanging. Once that passes, formally check off Milestone 24 above and
-   move to Milestone 25 (Frontend Response Schemas).
-2. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
+1. **PRIORITY when resuming: start Milestone 26 — TanStack Query Hooks.** `useTodayBriefing` for
+   the signed-in user's personalized daily briefing (loading/error/refetch, stable query keys). This
+   is also the natural place to finally wire `UserBriefingResponseSchema` (M25) into a real consumer.
+2. Confirm the `redirectAfterAuth.ts` retry fix (committed, see Known Issues) actually eliminates
+   the race on a real device — not yet tested live.
+3. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
-3. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12
+4. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12
    testing) as a precaution — still not confirmed done.
-4. Decide whether/how to wire `pytest` into CI (see Known Issues) — needs a decision on test
+5. Decide whether/how to wire `pytest` into CI (see Known Issues) — needs a decision on test
    database strategy before it's a simple config change.
-5. `docs/01-product-requirements.md` §10 (MVP Definition) still describes "five most important
+6. `docs/01-product-requirements.md` §10 (MVP Definition) still describes "five most important
    economic events," not reconciled with the personalization pivot — worth checking
    `docs/02-system-architecture.md` §5/§12 for the same kind of staleness while at it.
-6. A real product/prompt-design question surfaced during M19's live verification, deliberately
+7. A real product/prompt-design question surfaced during M19's live verification, deliberately
    deferred until there's a full prototype to test against: a user's opted-in market/sector/company
    topics correctly reach the model as real data, but the model's own editorial judgment about
    which "few sections" to write doesn't guarantee every opted-in topic actually shows up in the

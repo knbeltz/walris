@@ -853,9 +853,65 @@ constructs its own `Authorization` header or reads `EXPO_PUBLIC_API_BASE_URL` di
 
 ## Milestone 25 — Frontend Response Schemas
 
-Zod schemas validating the new personalized-briefing response shape (AI-generated narrative text,
-supporting indicator values, supporting news items) and the `UserPreferences` shape from Milestone
-14 — replaces the old schemas built around discrete `briefing`/`event`/`news` objects.
+### Objective
+
+Give the mobile app compile-time *and* runtime confidence in backend response shapes: Zod schemas
+that parse and validate what `GET /v1/users/me/briefing` and `GET`/`PUT /v1/users/me/preferences`
+actually return, instead of trusting `response.json()`'s `any` type the way the current onboarding
+screens and `useHealthCheck.ts` do.
+
+**Scope correction from this section's original draft:** the earlier version of this milestone
+described schemas for "AI-generated narrative text, supporting indicator values, supporting news
+items." That doesn't match what the backend actually returns today —
+`backend/app/schemas/user_briefing.py`'s `UserBriefingResponse` is just `date` + `content.headline`
++ `content.sections[].{heading, body}`. There's no structured indicator-value or news-item data in
+the response at all; that content only exists as prose inside each section's `body` text. Milestone
+30 (Key Indicator Chart Component) and Milestone 31 (Supporting News Cards) will need *something*
+structured to render from — a real gap between the plan and the current API surface, not something
+to paper over with a schema for fields that don't exist. This milestone validates the real current
+shape; the M30/M31 gap needs an explicit decision before those milestones start (see Deliverables).
+
+### Deliverables
+
+- Add `zod` as a mobile dependency (not yet installed — `npm install zod` in `mobile/`).
+- `UserBriefingResponse` schema matching the real API response:
+  - `date: string` (ISO date, as FastAPI serializes Pydantic's `date`)
+  - `content.headline: string`
+  - `content.sections: { heading: string; body: string }[]`
+- `UserPreferences` schema matching `backend/app/schemas/user.py`:
+  - `category: string | null`
+  - `additional_topics: string[]`
+- Parse (not just type-assert) `apiFetch`'s JSON responses through these schemas at the call site,
+  so a shape mismatch fails loudly (a caught, normalized error) instead of silently producing
+  `undefined`s deep in a component.
+- A short written note (in this section or `docs/05-resume-prompt.md`'s Known Issues) flagging the
+  M30/M31 structured-data gap above for a real decision later: either the backend gains
+  structured indicator/news fields on `UserBriefingResponse`, or the mobile app derives them some
+  other way. Not this milestone's problem to solve, but not to be silently forgotten either.
+
+### Acceptance Criteria
+
+- A real response from `GET /v1/users/me/briefing` (both branches — an existing briefing and the
+  no-briefing-yet fallback) parses successfully against the schema, verified against the live
+  local backend, not just asserted in isolation.
+- A real response from `GET /v1/users/me/preferences` parses successfully, for both a user with a
+  category already set and a freshly-signed-up user with `category: null`.
+- A deliberately malformed/unexpected response shape fails Zod parsing with a clear error, rather
+  than silently coercing into `undefined` fields.
+
+### Definition of Done
+
+Every response the mobile app reads from `/v1/users/me/briefing` and `/v1/users/me/preferences`
+is validated at runtime, not just assumed to match its TypeScript type.
+
+### Suggested Commit
+
+`feat: add Zod schemas for briefing and preferences responses`
+
+### Claude Code Tutor Prompt
+
+> Help me write Zod schemas for Walris's briefing and preferences API responses. Explain why
+> validating a response at runtime catches bugs that TypeScript's compile-time types alone can't.
 
 ## Milestone 26 — TanStack Query Hooks
 
