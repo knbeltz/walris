@@ -8,6 +8,7 @@ import type { SelectCardOption } from '@/components/ui/select-card';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { apiFetch } from '@/lib/apiClient';
+import { UserPreferencesSchema } from '@/schemas/preferences';
 
 const categories: SelectCardOption[] = [
   {
@@ -82,7 +83,7 @@ export default function CategorySelectionScreen() {
     }
 
     try {
-      await apiFetch('/v1/users/me/preferences', getToken, {
+      const response = await apiFetch('/v1/users/me/preferences', getToken, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -92,6 +93,10 @@ export default function CategorySelectionScreen() {
           additional_topics: [],
         }),
       });
+
+      const data = await response.json()
+
+      UserPreferencesSchema.parse(data);
 
       router.push('/topics');
     } catch (error: unknown) {

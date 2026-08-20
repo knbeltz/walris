@@ -8,6 +8,7 @@ import { Text } from '@/components/ui/text';
 import { TopicChips } from '@/components/ui/select-chips';
 import { getErrorMessage } from '@/lib/utils';
 import { apiFetch } from '@/lib/apiClient';
+import { UserPreferencesSchema } from '@/schemas/preferences';
 
 type UserPreferences = {
   category: string | null;
@@ -69,6 +70,10 @@ export default function TopicsScreen() {
 
         const data: UserPreferences = await response.json();
 
+        UserPreferencesSchema.parse(data);
+
+        
+
         setCategory(data.category);
         setSelectedTopics(data.additional_topics ?? []);
         setSavedPreferences(data);
@@ -104,8 +109,11 @@ export default function TopicsScreen() {
           additional_topics: selectedTopics,
         }),
       });
-
+      
       const data: UserPreferences = await response.json();
+
+      UserPreferencesSchema.parse(data);
+
 
       setSavedPreferences(data);
       setCategory(data.category);
