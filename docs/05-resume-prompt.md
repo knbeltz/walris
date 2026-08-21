@@ -5,8 +5,8 @@
 was verified end-to-end on a physical device — a real sign-up, a real Clerk-authenticated
 `PUT /v1/users/me/preferences`, and both onboarding screens saving/loading correctly against the
 real running backend. That device pass also surfaced a real, separate bug in `redirectAfterAuth.ts`
-(a duplicate-call race against Clerk's session activation), fixed with a bounded retry — see Known
-Issues, still pending its own on-device confirmation. M25 added `zod` and two schemas
+(a duplicate-call race against Clerk's session activation), fixed with a bounded retry and confirmed
+resolved live on a physical device — see Known Issues. M25 added `zod` and two schemas
 (`UserBriefingResponseSchema`, `UserPreferencesSchema`) verified against real backend-serialized
 data (not hand-typed fixtures) for every real branch: a found briefing, the no-briefing-yet
 fallback, a user with preferences set, and a fresh signup with `category: null`. Review caught two
@@ -286,8 +286,8 @@ sign-up (once explicitly after `signUp.finalize()`, once via a `useEffect` watch
 threw a false "session could not be verified" because `isSignedIn` can flip `true` slightly before
 `getToken()` is actually able to return a token. Fixed with a bounded retry (3 attempts, 200ms
 between them) rather than removing the `useEffect`, since that effect is also the only thing that
-redirects an already-signed-in user who lands back on `/sign-in`/`/sign-up`. See Known Issues —
-the fix is committed but still needs its own on-device confirmation.
+redirects an already-signed-in user who lands back on `/sign-in`/`/sign-up`. Confirmed resolved on
+a physical device 2026-08-20 — see Known Issues.
 
 ### Milestone 23 — Scheduled Personalization Job (complete for current scope, 2026-08-16–17)
 
@@ -1982,19 +1982,15 @@ walris/
 - **`backend/app/schemas/economic_event.py` (`EconomicEvent`) is unused dead weight** from the
   abandoned Finnhub/calendar scope — not yet deleted; decide when the `fmp_service.py` rewrite
   happens.
-- **`redirectAfterAuth` gets called twice on sign-up, and the duplicate can lose a timing race**
-  (found 2026-08-19 during M24 device verification, not fixed yet — planned for 2026-08-20).
-  `app/(auth)/sign-up.tsx` calls `redirectAfterAuth(getToken, router)` both explicitly inside
-  `signUp.finalize()`'s `navigate` callback (line 120) and again via a `useEffect` watching
-  `isSignedIn` (lines 21-25). `isSignedIn` can flip `true` slightly before `getToken()` is actually
-  able to return a token, so the `useEffect`'s copy loses that race, `getToken()` returns `null`,
-  and `redirectAfterAuth.ts:11-12` throws "Your session could not be verified." The `catch` block
-  swallows it and falls back to `router.replace('/category')`, so the user still lands correctly
-  (confirmed live: category → topics screens both worked fine after the error) — but it's a
-  spurious console error and a wasted duplicate network request on every sign-up/sign-in. Likely
-  fix: drop the redundant `useEffect` (the explicit `navigate`-callback call already covers it), or
-  have `redirectAfterAuth` retry/wait briefly instead of failing immediately when `getToken()`
-  returns null right after a session is created.
+- **Resolved (2026-08-20):** `redirectAfterAuth` used to get called twice on sign-up (once
+  explicitly inside `signUp.finalize()`'s `navigate` callback, once via a `useEffect` watching
+  `isSignedIn`), and the duplicate could lose a timing race against Clerk's session activation —
+  `isSignedIn` can flip `true` slightly before `getToken()` is actually able to return a token,
+  so the `useEffect`'s copy would throw "Your session could not be verified." Found 2026-08-19
+  during M24 device verification. Fixed by retrying `getToken()` up to 3 times with a 200ms delay
+  between attempts before giving up, rather than removing the `useEffect` (still needed — it's the
+  only thing that redirects an already-signed-in user who lands back on `/sign-in`/`/sign-up`).
+  Confirmed live on a physical device 2026-08-20: the error no longer appears.
 
 ## Commands
 
@@ -2082,24 +2078,23 @@ EXPO_PUBLIC_API_BASE_URL
 ## Next Steps
 
 *(Rewritten 2026-08-09, updated 2026-08-10, updated 2026-08-11 (twice), updated 2026-08-14, updated
-2026-08-15, updated 2026-08-17 (M22/M23 both closed), updated 2026-08-19, updated again 2026-08-20
-— Milestones 24 and 25 are both closed; item 1 below now points to Milestone 26.)*
+2026-08-15, updated 2026-08-17 (M22/M23 both closed), updated 2026-08-19, updated 2026-08-20 (M24/M25
+closed), updated again 2026-08-20 — the `redirectAfterAuth` retry fix is confirmed live; item 1
+below now points to Milestone 26.)*
 
 1. **PRIORITY when resuming: start Milestone 26 — TanStack Query Hooks.** `useTodayBriefing` for
    the signed-in user's personalized daily briefing (loading/error/refetch, stable query keys). This
    is also the natural place to finally wire `UserBriefingResponseSchema` (M25) into a real consumer.
-2. Confirm the `redirectAfterAuth.ts` retry fix (committed, see Known Issues) actually eliminates
-   the race on a real device — not yet tested live.
-3. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
+2. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
-4. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12
+3. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12
    testing) as a precaution — still not confirmed done.
-5. Decide whether/how to wire `pytest` into CI (see Known Issues) — needs a decision on test
+4. Decide whether/how to wire `pytest` into CI (see Known Issues) — needs a decision on test
    database strategy before it's a simple config change.
-6. `docs/01-product-requirements.md` §10 (MVP Definition) still describes "five most important
+5. `docs/01-product-requirements.md` §10 (MVP Definition) still describes "five most important
    economic events," not reconciled with the personalization pivot — worth checking
    `docs/02-system-architecture.md` §5/§12 for the same kind of staleness while at it.
-7. A real product/prompt-design question surfaced during M19's live verification, deliberately
+6. A real product/prompt-design question surfaced during M19's live verification, deliberately
    deferred until there's a full prototype to test against: a user's opted-in market/sector/company
    topics correctly reach the model as real data, but the model's own editorial judgment about
    which "few sections" to write doesn't guarantee every opted-in topic actually shows up in the
