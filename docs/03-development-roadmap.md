@@ -915,8 +915,60 @@ is validated at runtime, not just assumed to match its TypeScript type.
 
 ## Milestone 26 — TanStack Query Hooks
 
-`useTodayBriefing` for the signed-in user's personalized daily briefing, with loading/error/refetch
-support and stable query keys. No `useEventDetail` — there's no discrete event left to fetch.
+### Objective
+
+Give the Home Screen (M32) a single, reusable hook for the signed-in user's personalized daily
+briefing — `useTodayBriefing` — instead of a screen calling `apiFetch` and parsing the response
+itself the way the onboarding screens currently do. This is also where `UserBriefingResponseSchema`
+(built and verified in M25, but deliberately left unwired since nothing consumed it yet) gets wired
+into a real call site for the first time.
+
+**Scope note:** `docs/02` §15 (State Management) still lists "Fetching event details" as something
+TanStack Query should handle — stale, from the pre-pivot single-shared-briefing design. There's no
+discrete event left to fetch (per this section's own long-standing title), so no `useEventDetail`
+exists or is planned.
+
+### Deliverables
+
+- `mobile/hooks/useTodayBriefing.ts`, following the same shape as the existing
+  `mobile/hooks/useHealthCheck.ts`:
+  - Calls `useAuth()` (`@clerk/expo`) internally for `getToken`/`isLoaded`/`isSignedIn`, so callers
+    don't have to thread Clerk state through themselves.
+  - Query function: `apiFetch('/v1/users/me/briefing', getToken)` → `await response.json()` →
+    `UserBriefingResponseSchema.parse(...)`, so a shape mismatch fails loudly through the query's
+    `error` state instead of producing `undefined`s in a rendered screen.
+  - `enabled: isLoaded && isSignedIn` — mirrors the guard `topics.tsx` already uses before fetching,
+    so the hook doesn't fire a doomed authenticated request before Clerk is ready.
+  - A stable query key (e.g. `['briefing', 'today']` — no date parameter needed, since the endpoint
+    always resolves "today" server-side from the signed-in user's session).
+- No `useEventDetail` (see Scope note above) and no client-side caching/staleness tuning beyond
+  `queryClient`'s current defaults — not needed until a real screen surfaces a caching problem.
+
+### Acceptance Criteria
+
+- The hook's query function, called directly (not just type-checked), successfully parses a real
+  response from `GET /v1/users/me/briefing` for both branches — a real generated briefing, and the
+  no-briefing-yet fallback — the same two real-data cases M25 already verified the schema against.
+- `isPending`/`isError`/`data`/`refetch` all behave as expected from a real `useQuery` consumer
+  (a throwaway test screen or console log is enough — Milestone 32 owns the real Home Screen UI).
+- The hook doesn't fire before Clerk's session is ready (verified by confirming no request goes out
+  while `isLoaded` is `false`).
+
+### Definition of Done
+
+Any screen that needs the signed-in user's today briefing can call `useTodayBriefing()` and get
+back a validated, typed result with standard TanStack Query loading/error/refetch semantics — no
+screen constructs its own `apiFetch` + parsing logic for this endpoint.
+
+### Suggested Commit
+
+`feat: add useTodayBriefing query hook`
+
+### Claude Code Tutor Prompt
+
+> Help me build a TanStack Query hook for Walris's personalized briefing endpoint. Explain how to
+> combine a Zod-validated query function with Clerk's auth state so the hook doesn't fire requests
+> before the user's session is ready.
 
 ## Milestone 27 — Walris Theme Tokens
 

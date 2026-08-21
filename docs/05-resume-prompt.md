@@ -1,23 +1,16 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-08-20 (Milestones 24 and 25 are both complete. M24's `mobile/lib/apiClient.ts`
-was verified end-to-end on a physical device — a real sign-up, a real Clerk-authenticated
-`PUT /v1/users/me/preferences`, and both onboarding screens saving/loading correctly against the
-real running backend. That device pass also surfaced a real, separate bug in `redirectAfterAuth.ts`
-(a duplicate-call race against Clerk's session activation), fixed with a bounded retry and confirmed
-resolved live on a physical device — see Known Issues. M25 added `zod` and two schemas
-(`UserBriefingResponseSchema`, `UserPreferencesSchema`) verified against real backend-serialized
-data (not hand-typed fixtures) for every real branch: a found briefing, the no-briefing-yet
-fallback, a user with preferences set, and a fresh signup with `category: null`. Review caught two
-real bugs before they shipped — a `headling`/`heading` typo that would have failed every real
-briefing parse, and `additional_topics` typed as `z.string()` instead of `z.array(z.string())` that
-would have failed every real preferences parse — plus, separately, both onboarding screens were
-initially passing the raw `Response` object into `.parse()` instead of its parsed JSON body, which
-would have failed on every successful request; both are now fixed and reverified. Malformed-input
-rejection was also explicitly tested and confirmed. `UserBriefingResponseSchema` is verified but
-deliberately not wired to a consumer yet — there isn't one until M26's `useTodayBriefing` hook
-exists.)
+**Last Updated:** 2026-08-20 (Milestone 26 — TanStack Query Hooks — is complete. `useTodayBriefing`
+(`mobile/hooks/useTodayBriefing.ts`) wraps `apiFetch('/v1/users/me/briefing', getToken)` in a
+`useQuery`, parsing the response through M25's `UserBriefingResponseSchema` — the first real
+consumer that schema has had. Guarded with `enabled: isLoaded && isSignedIn` so it doesn't fire
+before Clerk's session is ready. Verified live on a physical device via a temporary debug block on
+the home screen (`app/index.tsx`'s `BriefingDebug`, marked for removal once Milestone 32 builds the
+real Home Screen): a real signed-in request reached the backend and correctly rendered the
+no-briefing-yet fallback ("No briefing available yet for today.", 0 sections) — this test user has
+no `user_briefings` row for today's date. Milestones 24 and 25 closed out earlier the same day; see
+their write-ups below for what shipped in each.)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -118,8 +111,11 @@ surfaced a real, unrelated bug in `redirectAfterAuth.ts` — see Known Issues. *
 data (not hand-typed fixtures) for every real branch, and malformed-input rejection explicitly
 confirmed. The preferences schema is wired into both onboarding screens' real `apiFetch` calls; the
 briefing schema is verified but deliberately not wired to a consumer yet, since none exists until
-M26's `useTodayBriefing` hook. See the write-ups below for the real bugs review caught in both
-milestones before they shipped.
+M26's `useTodayBriefing` hook. **Milestone 26 (TanStack Query Hooks) is complete** —
+`useTodayBriefing` wraps `apiFetch`/`UserBriefingResponseSchema` in a `useQuery`, gated on Clerk
+being ready, giving that schema its first real consumer. Verified live on a physical device via a
+temporary debug block on the home screen. See the write-ups below for the real bugs review caught
+in all three of these milestones before they shipped.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -163,7 +159,9 @@ milestones before they shipped.
 - [x] **Milestone 25 — Frontend Response Schemas** (`zod` added, both schemas verified against real
   backend data and malformed-input rejection, preferences schema wired into both onboarding
   screens; briefing schema deliberately left unwired until M26 — see notes below)
-- [ ] Milestones 26–34 — Mobile App (Part 3, remaining)
+- [x] **Milestone 26 — TanStack Query Hooks** (`useTodayBriefing` built, wired to
+  `UserBriefingResponseSchema`, verified live on a physical device — see notes below)
+- [ ] Milestones 27–34 — Mobile App (Part 3, remaining)
 - [ ] Milestones 35–50 — Notifications, QA, Deployment & Launch (Part 4)
 
 ## Current Milestone
@@ -176,18 +174,57 @@ notifications (backend scope), a full integration test pass, and the admin-trigg
 surface M23 needed. See the M22/M23 write-ups below for exactly how both closed on 2026-08-17, in
 one combined live run rather than two separate ones.
 
-**Milestones 24 and 25, the start of Part 3 (Mobile App, M24–34), are both complete.** M24 built
-the shared `apiClient.ts` fetch wrapper (per `docs/02` §13/§14, `docs/08` §3/§10) and verified it
-end-to-end on a physical device. M25 added Zod schemas for the briefing and preferences responses,
-verified against real backend data. See the M24/M25 write-ups below for what got built and the real
-bugs review caught in both before they shipped. **Next up: Milestone 26 — TanStack Query Hooks**
-(`useTodayBriefing`), not yet started.
+**Milestones 24, 25, and 26 — the start of Part 3 (Mobile App, M24–34) — are all complete.** M24
+built the shared `apiClient.ts` fetch wrapper (per `docs/02` §13/§14, `docs/08` §3/§10) and verified
+it end-to-end on a physical device. M25 added Zod schemas for the briefing and preferences
+responses, verified against real backend data. M26 built `useTodayBriefing`, wiring the briefing
+schema into a real `useQuery` consumer for the first time and verifying it live on a physical
+device. See the write-ups below for what got built and the real bugs review caught in all three
+before they shipped. **Next up: Milestone 27 — Walris Theme Tokens**, not yet started.
 
 **Milestone 14's core flow is verified end-to-end on a real device** — sign-up → `/category` →
 `/topics` → `/` all confirmed working against the live database. Two smaller pieces of M14 are
 still outstanding (name field, settings screen — see M14 notes below), but the flow itself is no
 longer blocked. The personalization pivot is fully planned in
 `docs/08-personalization-pivot-plan.md`.
+
+### Milestone 26 — TanStack Query Hooks (complete, 2026-08-20)
+
+Per `docs/03`'s M26 scope: a single reusable hook for the signed-in user's personalized daily
+briefing, giving M25's `UserBriefingResponseSchema` its first real consumer instead of leaving it
+verified-but-unwired.
+
+**What got built:**
+
+- `mobile/hooks/useTodayBriefing.ts` — `useTodayBriefing()`:
+  - Calls `useAuth()` internally for `getToken`/`isLoaded`/`isSignedIn`, so callers don't thread
+    Clerk state through themselves.
+  - Query function: `apiFetch('/v1/users/me/briefing', getToken)` → `await response.json()` →
+    `UserBriefingResponseSchema.parse(...)` — a shape mismatch fails loudly through the query's
+    `error` state.
+  - `enabled: isLoaded && isSignedIn`, mirroring the guard `topics.tsx` already used, so it doesn't
+    fire before Clerk's session is ready.
+  - Stable query key `['briefing', 'today']` — no date parameter needed, since the endpoint always
+    resolves "today" server-side from the signed-in user's session.
+- A temporary debug block (`BriefingDebug`) added to `app/index.tsx`, rendering the hook's
+  loading/error/data states directly on the home screen — explicitly marked in a comment for
+  removal once Milestone 32 builds the real Home Screen.
+
+**Bugs caught and fixed during review, before any of this shipped:**
+
+- The hook was originally named `useBriefing` and `export default`ed, breaking both the milestone's
+  own naming (`useTodayBriefing`) and the codebase's existing convention — every other hook
+  (`useHealthCheck.ts`'s `useHealth`) uses a named export, not default. Renamed and switched to a
+  named export.
+- An unused `UserBriefingResponse` type import (only `UserBriefingResponseSchema` was actually
+  used).
+
+**Verification:** confirmed live on a physical device — a real signed-in request reached
+`GET /v1/users/me/briefing` and correctly rendered the real no-briefing-yet fallback ("No briefing
+available yet for today.", 0 sections), matching what this test user's actual database state
+should produce (no `user_briefings` row for today's date, per the earlier M25 verification's real
+data check). `isPending`/`isError`/`data` all behaved as expected; no request fired before Clerk
+finished loading.
 
 ### Milestone 25 — Frontend Response Schemas (complete, 2026-08-20)
 
@@ -2079,12 +2116,14 @@ EXPO_PUBLIC_API_BASE_URL
 
 *(Rewritten 2026-08-09, updated 2026-08-10, updated 2026-08-11 (twice), updated 2026-08-14, updated
 2026-08-15, updated 2026-08-17 (M22/M23 both closed), updated 2026-08-19, updated 2026-08-20 (M24/M25
-closed), updated again 2026-08-20 — the `redirectAfterAuth` retry fix is confirmed live; item 1
-below now points to Milestone 26.)*
+closed), updated 2026-08-20 (`redirectAfterAuth` fix confirmed live), updated again 2026-08-20 (M26
+closed) — item 1 below now points to Milestone 27.)*
 
-1. **PRIORITY when resuming: start Milestone 26 — TanStack Query Hooks.** `useTodayBriefing` for
-   the signed-in user's personalized daily briefing (loading/error/refetch, stable query keys). This
-   is also the natural place to finally wire `UserBriefingResponseSchema` (M25) into a real consumer.
+1. **PRIORITY when resuming: start Milestone 27 — Walris Theme Tokens.** Design tokens (colors,
+   typography, spacing, radius) centralized under `mobile/theme/`, matching the approved Walris
+   design direction — unchanged from the roadmap's original pre-pivot scope. Also worth deciding
+   when to remove the temporary `BriefingDebug` block from `app/index.tsx` (added for M26
+   verification) — either now, or leave it until M32 replaces it with the real Home Screen.
 2. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
 3. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12

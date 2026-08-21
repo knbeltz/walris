@@ -46,7 +46,7 @@ Full documentation lives in [`docs/`](docs/):
 
 ## Status
 
-In active development. **Milestones 1-25 are complete** — the entire backend build for the
+In active development. **Milestones 1-26 are complete** — the entire backend build for the
 personalization pivot: backend foundation, Supabase, CI, user accounts via Clerk, category/topic
 selection, the FRED/Marketaux fetch services, a full fetch-filter-persist-cleanup pipeline for
 daily market/news data, per-user OpenAI briefing generation, the daily briefing orchestrator tying
@@ -56,9 +56,9 @@ daily jobs — all verified end-to-end against live APIs, the live OpenAI API, t
 API, and the live database, including a real weekday run on 2026-08-17 confirming real notification
 deactivation. Milestone 21's mobile registration flow is deliberately deferred to the Mobile App
 phase. Wiring M23's admin endpoints to an actual hosted cron schedule is deferred to Milestone 42,
-once the backend has a real deployment to point one at. **Milestones 24 and 25, the start of the
-Mobile App phase, are both complete** — a shared, authenticated fetch wrapper
-(`mobile/lib/apiClient.ts`), verified end-to-end on a physical device, and Zod schemas
-(`mobile/schemas/`) validating the briefing and preferences API responses against real backend
-data. Next up: Milestone 26 (TanStack Query Hooks). See `docs/05-resume-prompt.md` for the current
-milestone and next steps.
+once the backend has a real deployment to point one at. **Milestones 24, 25, and 26, the start of
+the Mobile App phase, are all complete** — a shared, authenticated fetch wrapper
+(`mobile/lib/apiClient.ts`), Zod schemas (`mobile/schemas/`) validating the briefing and
+preferences API responses, and a `useTodayBriefing` TanStack Query hook — all verified end-to-end
+on a physical device. Next up: Milestone 27 (Walris Theme Tokens). See `docs/05-resume-prompt.md`
+for the current milestone and next steps.
