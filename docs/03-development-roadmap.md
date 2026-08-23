@@ -1082,8 +1082,58 @@ adding a new screen never requires re-deciding how to handle either.
 
 ## Milestone 29 — Daily Briefing Header
 
-App name, current date, and the signed-in user's name/greeting where relevant — replaces the old
-generic version, which had no concept of a signed-in user to greet.
+### Objective
+
+Build the identity header every screen-content milestone from here on can sit under: app name,
+current date, and a greeting — replacing the old generic version, which had no concept of a
+signed-in user to greet.
+
+**Scope note:** `docs/04` §10.2 describes a richer "Daily Briefing Header" — logo/name, date,
+briefing title, briefing summary, generated timestamp. The roadmap already narrows this milestone
+to just app name/date/greeting, deferring the actual briefing content (headline, sections) to
+Milestone 32's Home Screen — a sensible split (this = identity header, M32 = real content), kept as
+originally scoped.
+
+**Scope decision (2026-08-21):** the greeting is a generic time-of-day greeting ("Good morning" /
+"Good afternoon" / "Good evening" based on device time), not personalized with the user's name.
+`User.name` exists as a DB column, but nothing in the app currently sets it — it's the still-open
+Milestone 14 loose end (a name field, deliberately deferred to onboarding, not yet built), and
+there's no API endpoint exposing it either. Building a name-based greeting now would mean either
+faking data or extending the backend for a field nothing populates yet. Name-based personalization
+becomes a real follow-up once M14's name field actually exists.
+
+### Deliverables
+
+- `mobile/components/ui/daily-briefing-header.tsx` — a `DailyBriefingHeader` component:
+  - App name ("Walris"), styled with M27's `headlineMd`/`headlineSm` typography token (Libre
+    Caslon Text, per `docs/04` §10.2's "serif title" style guidance).
+  - Current date, formatted via the built-in `Intl`/`Date` APIs (no new date-library dependency
+    needed for this).
+  - A time-of-day greeting, computed from the device's local hour.
+- Wire it into `app/index.tsx` above the existing debug blocks, inside `Screen`, as the first real
+  use of both M27's typography tokens and M28's layout shell together outside the debug scaffolding.
+
+### Acceptance Criteria
+
+- Renders correctly on a physical device: correct date for "today," a greeting that matches the
+  actual time of day (verified by checking at a couple of different times, not just once).
+- Uses `Screen`/typography tokens rather than hardcoded styles or ad hoc `Text` styling.
+
+### Definition of Done
+
+Every screen that needs the app's identity header (starting with the home screen, extending to
+whichever future screens need it) can render `DailyBriefingHeader` instead of hand-rolling app
+name/date/greeting markup.
+
+### Suggested Commit
+
+`feat: add DailyBriefingHeader component`
+
+### Claude Code Tutor Prompt
+
+> Help me build a header component for Walris that shows the app name, today's date, and a
+> time-of-day greeting. Explain how to compute a greeting from the device's local time without
+> pulling in a date-formatting library for something this simple.
 
 ## Milestone 30 — Key Indicator Chart Component
 

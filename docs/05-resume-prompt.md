@@ -1,19 +1,17 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-08-21 (Milestone 28 — App Layout Shell — is complete. Checked the actual code
-before starting: `index.tsx` wrapped in `SafeAreaView` with no margin, while `category.tsx`/
-`topics.tsx` wrapped in `ScrollView` directly with **no `SafeAreaView` at all** — a real,
-inconsistent gap, not a hypothetical one. `components/ui/screen.tsx`'s `Screen` component (safe
-area + optional `scroll` prop + M27's `md` spacing-token margin) now wraps all three, migrated off
-their ad hoc wrapping. Review caught a real correctness gap during the migration: `topics.tsx`'s
-loading/error/no-preferences-yet early returns were rendering bare `<Text>` entirely outside
-`<Screen>`, bypassing safe-area handling and margin for exactly the states a user sees first — now
-wrapped in `<Screen>` too. Confirmed live on a physical device via a full fresh onboarding run (the
-test user's `category`/`additional_topics` were reset to `null`/`[]` in the database to force the
-whole sign-up → category → topics flow, including the loading state that was just fixed) — safe
-area, scroll behavior, and margins all correct across all three screens. Milestone 27 closed out
-earlier the same day; see its write-up below.)
+**Last Updated:** 2026-08-21 (Milestone 29 — Daily Briefing Header — is complete.
+`components/ui/daily-briefing-header.tsx`'s `DailyBriefingHeader` renders the app name (Libre
+Caslon Text via M27's `headlineMd` token), a time-of-day greeting (`Good Morning`/`Good
+Afternoon`/`Good Evening`, computed from the device's local hour with an 18:00 afternoon/evening
+cutoff — confirmed correct at 17:46 reading "Good Afternoon"), and today's date via `Intl`, wired
+into `app/index.tsx` above the existing debug blocks. Review caught two real bugs before this
+shipped: the component was named `HomeHeader` instead of the spec'd `DailyBriefingHeader`, and the
+afternoon greeting had a typo ("Good Afternon!"). Scoped deliberately to a generic greeting, not
+name-personalized — `User.name` exists as a DB column but nothing sets it yet (still-open M14 loose
+end) — see the M29 write-up below. Milestones 27 and 28 closed out earlier; see their write-ups
+below.)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -122,8 +120,10 @@ typography tokens and spacing/radius Tailwind extensions are built, font loading
 were confirmed live on a physical device 2026-08-21. **Milestone 28 (App Layout Shell) is also
 complete** — a shared `Screen` component now handles safe areas, optional scrolling, and page
 margins for every screen, migrated off each screen's own inconsistent ad hoc handling, verified
-live via a full fresh onboarding run. See the write-ups below for the real bugs review caught in
-all of these milestones before they shipped.
+live via a full fresh onboarding run. **Milestone 29 (Daily Briefing Header) is also complete** —
+`DailyBriefingHeader` renders the app name, a time-of-day greeting, and today's date, wired into
+`app/index.tsx`, confirmed correct live on a physical device. See the write-ups below for the real
+bugs review caught in all of these milestones before they shipped.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -174,7 +174,9 @@ all of these milestones before they shipped.
   notes below)
 - [x] **Milestone 28 — App Layout Shell** (shared `Screen` component built, migrated onto all
   three existing screens, verified live on a physical device 2026-08-21 — see notes below)
-- [ ] Milestones 29–34 — Mobile App (Part 3, remaining)
+- [x] **Milestone 29 — Daily Briefing Header** (`DailyBriefingHeader` built and wired into
+  `app/index.tsx`, verified live on a physical device 2026-08-21 — see notes below)
+- [ ] Milestones 30–34 — Mobile App (Part 3, remaining)
 - [ ] Milestones 35–50 — Notifications, QA, Deployment & Launch (Part 4)
 
 ## Current Milestone
@@ -187,22 +189,54 @@ notifications (backend scope), a full integration test pass, and the admin-trigg
 surface M23 needed. See the M22/M23 write-ups below for exactly how both closed on 2026-08-17, in
 one combined live run rather than two separate ones.
 
-**Milestones 24 through 28 — the start of Part 3 (Mobile App, M24–34) — are all complete.** M24
+**Milestones 24 through 29 — the start of Part 3 (Mobile App, M24–34) — are all complete.** M24
 built the shared `apiClient.ts` fetch wrapper (per `docs/02` §13/§14, `docs/08` §3/§10) and verified
 it end-to-end on a physical device. M25 added Zod schemas for the briefing and preferences
 responses, verified against real backend data. M26 built `useTodayBriefing`, wiring the briefing
 schema into a real `useQuery` consumer for the first time and verifying it live on a physical
 device. M27 built typography tokens, Tailwind spacing/radius extensions, and font loading. M28
-built the shared `Screen` layout component and migrated every screen onto it. All confirmed live on
-a physical device 2026-08-21. See the write-ups below for what got built and the real bugs review
-caught in each before they shipped. **Next up: Milestone 29 — Daily Briefing Header**, not yet
-started.
+built the shared `Screen` layout component and migrated every screen onto it. M29 built
+`DailyBriefingHeader` (app name, time-of-day greeting, date) and wired it into the home screen. All
+confirmed live on a physical device 2026-08-21. See the write-ups below for what got built and the
+real bugs review caught in each before they shipped. **Next up: Milestone 30 — Key Indicator Chart
+Component**, not yet started.
 
 **Milestone 14's core flow is verified end-to-end on a real device** — sign-up → `/category` →
 `/topics` → `/` all confirmed working against the live database. Two smaller pieces of M14 are
 still outstanding (name field, settings screen — see M14 notes below), but the flow itself is no
 longer blocked. The personalization pivot is fully planned in
 `docs/08-personalization-pivot-plan.md`.
+
+### Milestone 29 — Daily Briefing Header (complete, 2026-08-21)
+
+Per `docs/03`'s M29 scope: an identity header (app name, date, greeting) every future
+screen-content milestone sits under — `docs/04` §10.2 describes a richer header including the
+briefing title/summary/generated-timestamp, but that content is deliberately deferred to
+Milestone 32's Home Screen; this milestone stays scoped to identity only, as the roadmap intended.
+
+**Scope decision:** the greeting is a generic time-of-day greeting, not personalized with the
+user's name. `User.name` exists as a DB column, but nothing in the app sets it yet — the
+still-open Milestone 14 loose end — and there's no API endpoint exposing it either. Building a
+name-based greeting now would mean faking data; deferred until M14's name field actually exists.
+
+**What got built:**
+
+- `mobile/components/ui/daily-briefing-header.tsx` — `DailyBriefingHeader`:
+  - App name ("Walris") styled with M27's `headlineMd` token (Libre Caslon Text).
+  - A time-of-day greeting computed from the device's local hour (`< 12` morning, `< 18`
+    afternoon, else evening).
+  - Today's date via the built-in `Intl.DateTimeFormat` — no new date-library dependency needed.
+- Wired into `app/index.tsx`, rendered first inside `Screen`, above the temporary debug blocks.
+
+**Bugs caught and fixed during review, before any of this shipped:**
+
+- The component was named `HomeHeader` instead of the spec'd `DailyBriefingHeader` (also the
+  filename's own name) — renamed.
+- A typo in the afternoon greeting: `'Good Afternon!'` instead of `'Good Afternoon!'`.
+
+**Verification:** confirmed live on a physical device — correct date, and the greeting boundary
+checked directly: 17:46 (5:46pm) correctly read "Good Afternoon," confirming the `< 18` cutoff
+behaves as intended (evening starts at 6pm, kept as-is per user preference).
 
 ### Milestone 28 — App Layout Shell (complete, 2026-08-21)
 
@@ -2222,18 +2256,19 @@ EXPO_PUBLIC_API_BASE_URL
 *(Rewritten 2026-08-09, updated 2026-08-10, updated 2026-08-11 (twice), updated 2026-08-14, updated
 2026-08-15, updated 2026-08-17 (M22/M23 both closed), updated 2026-08-19, updated 2026-08-20 (M24/M25
 closed), updated 2026-08-20 (`redirectAfterAuth` fix confirmed live), updated 2026-08-20 (M26
-closed), updated 2026-08-21 (M27 confirmed live and closed), updated again 2026-08-21 (M28 confirmed
-live and closed) — item 1 below now points to Milestone 29.)*
+closed), updated 2026-08-21 (M27 confirmed live and closed), updated 2026-08-21 (M28 confirmed live
+and closed), updated again 2026-08-21 (M29 confirmed live and closed) — item 1 below now points to
+Milestone 30.)*
 
-1. **PRIORITY when resuming: start Milestone 29 — Daily Briefing Header.** Unchanged from the
-   roadmap's original pre-pivot scope. Now that `Screen` (M28) and the typography tokens (M27)
-   both exist, this is the first real screen-content milestone that gets to use them together.
+1. **PRIORITY when resuming: start Milestone 30 — Key Indicator Chart Component.** A lightweight
+   chart rendering one or more of the FRED indicators referenced in that day's personalized
+   narrative — replaces the old event-detail-page chart. Note the real, still-unresolved gap this
+   runs into (documented in M25's write-up above): the actual `/v1/users/me/briefing` response has
+   no structured indicator data at all, only prose inside `content.sections[].body` — this needs
+   an explicit decision before M30 can pull real chart data, not something to improvise around.
    (Reminder: the temporary `BriefingDebug` and `TypographyDebug` blocks in `app/index.tsx` are
    still there deliberately — `BriefingDebug` stays until Milestone 32 builds the real Home Screen;
-   `TypographyDebug` should come out once a real screen applies the typography tokens. The test
-   user's `category`/`additional_topics` were reset to `null`/`[]` for M28's device verification —
-   they'll need re-selecting via the app, or the daily pipeline won't generate a briefing for this
-   user until then.)
+   `TypographyDebug` should come out once a real screen applies the typography tokens.)
 2. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
 3. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12
