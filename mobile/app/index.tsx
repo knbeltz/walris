@@ -5,6 +5,7 @@ import { useTodayBriefing } from '@/hooks/useTodayBriefing';
 import { typography } from '@/theme/typography';
 import { Link } from 'expo-router';
 import { Screen } from '@/components/ui/screen';
+import { DailyBriefingHeader } from '@/components/ui/daily-briefing-header';
 
 // Temporary — Milestone 27 verification only. Remove once real screens apply these tokens.
 function TypographyDebug() {
@@ -75,6 +76,7 @@ function HealthProfile() {
 export default function Home() {
   return (
     <Screen>
+      <DailyBriefingHeader />
       <HealthProfile />
       <BriefingDebug />
       <TypographyDebug />
