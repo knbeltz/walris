@@ -1,10 +1,10 @@
 import { Text } from '@/components/ui/text';
 import { View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHealth } from '@/hooks/useHealthCheck';
 import { useTodayBriefing } from '@/hooks/useTodayBriefing';
 import { typography } from '@/theme/typography';
 import { Link } from 'expo-router';
+import { Screen } from '@/components/ui/screen';
 
 // Temporary — Milestone 27 verification only. Remove once real screens apply these tokens.
 function TypographyDebug() {
@@ -74,10 +74,10 @@ function HealthProfile() {
 
 export default function Home() {
   return (
-    <SafeAreaView>
+    <Screen>
       <HealthProfile />
       <BriefingDebug />
       <TypographyDebug />
-    </SafeAreaView>
+    </Screen>
   );
 }

@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@clerk/expo';
 
@@ -9,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { apiFetch } from '@/lib/apiClient';
 import { UserPreferencesSchema } from '@/schemas/preferences';
+import { Screen } from '@/components/ui/screen';
 
 const categories: SelectCardOption[] = [
   {
@@ -94,7 +94,7 @@ export default function CategorySelectionScreen() {
         }),
       });
 
-      const data = await response.json()
+      const data = await response.json();
 
       UserPreferencesSchema.parse(data);
 
@@ -111,7 +111,7 @@ export default function CategorySelectionScreen() {
   };
 
   return (
-    <ScrollView>
+    <Screen scroll>
       <SelectCard
         // The full list of categories the user can choose from.
         options={categories}
@@ -131,6 +131,6 @@ export default function CategorySelectionScreen() {
       <Button onPress={handleContinue} disabled={!selectedCategory}>
         <Text>Continue</Text>
       </Button>
-    </ScrollView>
+    </Screen>
   );
 }

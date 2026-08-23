@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@clerk/expo';
 
@@ -9,6 +8,7 @@ import { TopicChips } from '@/components/ui/select-chips';
 import { getErrorMessage } from '@/lib/utils';
 import { apiFetch } from '@/lib/apiClient';
 import { UserPreferencesSchema } from '@/schemas/preferences';
+import { Screen } from '@/components/ui/screen';
 
 type UserPreferences = {
   category: string | null;
@@ -72,8 +72,6 @@ export default function TopicsScreen() {
 
         UserPreferencesSchema.parse(data);
 
-        
-
         setCategory(data.category);
         setSelectedTopics(data.additional_topics ?? []);
         setSavedPreferences(data);
@@ -109,11 +107,10 @@ export default function TopicsScreen() {
           additional_topics: selectedTopics,
         }),
       });
-      
+
       const data: UserPreferences = await response.json();
 
       UserPreferencesSchema.parse(data);
-
 
       setSavedPreferences(data);
       setCategory(data.category);
@@ -129,19 +126,31 @@ export default function TopicsScreen() {
   };
 
   if (isLoading) {
-    return <Text>Loading...</Text>;
+    return (
+      <Screen>
+        <Text>Loading...</Text>
+      </Screen>
+    );
   }
 
   if (fetchError) {
-    return <Text>{fetchError}</Text>;
+    return (
+      <Screen>
+        <Text>{fetchError}</Text>
+      </Screen>
+    );
   }
 
   if (savedPreferences === null) {
-    return <Text>Preferences could not be loaded.</Text>;
+    return (
+      <Screen>
+        <Text>Preferences could not be loaded.</Text>
+      </Screen>
+    );
   }
 
   return (
-    <ScrollView>
+    <Screen scroll>
       <Text>Choose additional topics</Text>
 
       <TopicChips
@@ -155,6 +164,6 @@ export default function TopicsScreen() {
       <Button onPress={handleContinue} disabled={isSubmitting}>
         <Text>{isSubmitting ? 'Saving...' : 'Continue'}</Text>
       </Button>
-    </ScrollView>
+    </Screen>
   );
 }
