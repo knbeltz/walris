@@ -3,7 +3,24 @@ import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHealth } from '@/hooks/useHealthCheck';
 import { useTodayBriefing } from '@/hooks/useTodayBriefing';
+import { typography } from '@/theme/typography';
 import { Link } from 'expo-router';
+
+// Temporary — Milestone 27 verification only. Remove once real screens apply these tokens.
+function TypographyDebug() {
+  return (
+    <View>
+      <Text style={typography.displayLg}>displayLg (Libre Caslon 700)</Text>
+      <Text style={typography.displayLgMobile}>displayLgMobile</Text>
+      <Text style={typography.headlineMd}>headlineMd</Text>
+      <Text style={typography.headlineSm}>headlineSm</Text>
+      <Text style={typography.bodyLg}>bodyLg (Inter 400)</Text>
+      <Text style={typography.bodyMd}>bodyMd</Text>
+      <Text style={typography.caption}>caption (Inter 500)</Text>
+      <Text style={typography.dataLabel}>dataLabel (JetBrains Mono 500)</Text>
+    </View>
+  );
+}
 
 // Temporary — Milestone 26 verification only. Remove once Milestone 32 builds the real Home Screen.
 function BriefingDebug() {
@@ -60,6 +77,7 @@ export default function Home() {
     <SafeAreaView>
       <HealthProfile />
       <BriefingDebug />
+      <TypographyDebug />
     </SafeAreaView>
   );
 }

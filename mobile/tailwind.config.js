@@ -42,10 +42,26 @@ module.exports = {
           foreground: 'hsl(var(--card-foreground))',
         },
       },
+      // docs/04-design-system.md §8 (Shape System) — fixed scale, not derived from --radius.
       borderRadius: {
-        lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 2px)',
-        sm: 'calc(var(--radius) - 4px)',
+        sm: '0.25rem',
+        DEFAULT: '0.5rem',
+        md: '0.75rem',
+        lg: '1rem',
+        xl: '1.5rem',
+        full: '9999px',
+      },
+      // docs/04-design-system.md §6 (Spacing System) — an 8px base scale; these values already
+      // match Tailwind's own default numeric spacing (p-4 = 1rem = 16px, etc.), this just adds
+      // the named vocabulary docs/04 uses.
+      spacing: {
+        xs: '0.25rem',
+        sm: '0.5rem',
+        md: '1rem',
+        lg: '1.5rem',
+        xl: '2rem',
+        '2xl': '2.5rem',
+        '3xl': '3rem',
       },
       borderWidth: {
         hairline: hairlineWidth(),
