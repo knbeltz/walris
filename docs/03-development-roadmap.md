@@ -972,9 +972,66 @@ screen constructs its own `apiFetch` + parsing logic for this endpoint.
 
 ## Milestone 27 — Walris Theme Tokens
 
-Unchanged from the original scope: design tokens (colors, typography, spacing, radius) centralized
-under `mobile/theme/`, applied instead of hardcoded values, matching the approved Walris design
-direction.
+### Objective
+
+Make `docs/04-design-system.md`'s approved typography, spacing, and shape system real, usable
+tokens in the mobile app — the same way its color system already is.
+
+**Scope correction from this section's original draft:** it assumed colors, typography, spacing,
+and radius all needed to be built from scratch under a single `mobile/theme/` folder. Checking the
+actual codebase first: **colors are already done.** `mobile/global.css`'s CSS variables,
+`tailwind.config.js`'s color mappings, and `mobile/lib/theme.ts` (React Navigation's theme) all
+carry real Walris brand values, not placeholder/default ones — verified by converting
+`docs/04`'s hex values back from the HSL stored in `global.css` (e.g. `--background: 231 100%
+98.6%` is exactly `#f8f9ff`). This must have been seeded correctly during Milestone 4's scaffolding.
+Forcing those into a second `mobile/theme/` copy would just create a duplicate source of truth
+fighting NativeWind's own CSS-variable-based theming model — so this milestone leaves colors
+untouched and scopes to what's actually missing: typography and the rest of the shape/spacing
+system. (User decision, 2026-08-20: keep colors where they are; don't consolidate.)
+
+### Deliverables
+
+- Load the three approved typefaces (`docs/04` §5) via `@expo-google-fonts/*` — all three
+  (`libre-caslon-text`, `inter`, `jetbrains-mono`) are published packages, confirmed on the npm
+  registry, so no manual font-file sourcing is needed.
+- `mobile/theme/typography.ts` — one exported style object per type-scale token (`displayLg`,
+  `displayLgMobile`, `headlineMd`, `headlineSm`, `bodyLg`, `bodyMd`, `caption`, `dataLabel`),
+  bundling `fontFamily`/`fontSize`/`fontWeight`/`lineHeight`/`letterSpacing` per `docs/04` §5.1–5.3.
+  Plain TS objects rather than Tailwind classes, since NativeWind's `text-*` utilities only cover
+  `fontSize` — Walris's tokens are multi-property bundles.
+- Extend `tailwind.config.js`'s `theme.extend`:
+  - `spacing` aliases (`xs`/`sm`/`md`/`lg`/`xl`/`2xl`/`3xl`) matching `docs/04` §6's 8px scale —
+    Tailwind's numeric scale already produces the right pixel values (`p-4`=16px, `p-6`=24px,
+    `p-8`=32px), this just adds the named vocabulary `docs/04` uses.
+  - `borderRadius` scale (`sm`/`DEFAULT`/`md`/`lg`/`xl`/`full`) per `docs/04` §8, replacing the
+    current setup where only one `--radius` CSS variable exists and `lg`/`md`/`sm` are all derived
+    from it via `calc()`.
+
+### Acceptance Criteria
+
+- All three fonts render correctly on a physical device (not just configured) — a quick temporary
+  render of one string per typeface is enough to confirm, same verification style used for M26's
+  `BriefingDebug`.
+- Each typography token in `mobile/theme/typography.ts` matches `docs/04`'s exact
+  size/weight/lineHeight/letterSpacing values.
+- The new spacing/radius Tailwind classes are usable in a component (e.g. `p-lg`, `rounded-md`) and
+  render the expected pixel values.
+
+### Definition of Done
+
+Every typeface, spacing value, and corner radius `docs/04-design-system.md` specifies is available
+as a real, reusable token — colors already were, this closes the remaining gap — so no future
+screen milestone needs to hardcode a font, spacing value, or radius by hand.
+
+### Suggested Commit
+
+`feat: add typography, spacing, and radius theme tokens`
+
+### Claude Code Tutor Prompt
+
+> Help me load custom fonts in Expo and turn Walris's typography scale into reusable style tokens.
+> Explain why a multi-property type-scale token doesn't map cleanly onto Tailwind's single-value
+> font-size utilities.
 
 ## Milestone 28 — App Layout Shell
 

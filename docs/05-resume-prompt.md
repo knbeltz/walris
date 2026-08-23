@@ -1,16 +1,17 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-08-20 (Milestone 26 — TanStack Query Hooks — is complete. `useTodayBriefing`
-(`mobile/hooks/useTodayBriefing.ts`) wraps `apiFetch('/v1/users/me/briefing', getToken)` in a
-`useQuery`, parsing the response through M25's `UserBriefingResponseSchema` — the first real
-consumer that schema has had. Guarded with `enabled: isLoaded && isSignedIn` so it doesn't fire
-before Clerk's session is ready. Verified live on a physical device via a temporary debug block on
-the home screen (`app/index.tsx`'s `BriefingDebug`, marked for removal once Milestone 32 builds the
-real Home Screen): a real signed-in request reached the backend and correctly rendered the
-no-briefing-yet fallback ("No briefing available yet for today.", 0 sections) — this test user has
-no `user_briefings` row for today's date. Milestones 24 and 25 closed out earlier the same day; see
-their write-ups below for what shipped in each.)
+**Last Updated:** 2026-08-20 (Milestone 27 — Walris Theme Tokens — is in progress, not yet complete.
+Colors were already correctly wired (verified during scoping — see the M27 write-up below), so this
+milestone covers what was actually missing: typography and the rest of the spacing/radius system.
+`mobile/theme/typography.ts`'s 8 type-scale tokens now match `docs/04` §5.1–5.3 exactly (fixed
+several real value mismatches — see write-up), `tailwind.config.js` got the full spacing/radius
+scale from `docs/04` §6/§8, and `app/_layout.tsx` now loads the four actual font weights those
+tokens reference via `useFonts` + a splash-screen gate. **Not yet done: on-device verification** —
+a temporary `TypographyDebug` block was added to `app/index.tsx` (alongside M26's `BriefingDebug`)
+to check whether all three typefaces actually render correctly and the new spacing/radius classes
+produce the right pixel values; this hasn't been checked on a physical device yet, planned for
+2026-08-21. Milestone 26 closed out earlier the same day; see its write-up below.)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -114,8 +115,11 @@ briefing schema is verified but deliberately not wired to a consumer yet, since 
 M26's `useTodayBriefing` hook. **Milestone 26 (TanStack Query Hooks) is complete** —
 `useTodayBriefing` wraps `apiFetch`/`UserBriefingResponseSchema` in a `useQuery`, gated on Clerk
 being ready, giving that schema its first real consumer. Verified live on a physical device via a
-temporary debug block on the home screen. See the write-ups below for the real bugs review caught
-in all three of these milestones before they shipped.
+temporary debug block on the home screen. **Milestone 27 (Walris Theme Tokens) is in progress** —
+typography tokens and spacing/radius Tailwind extensions are built and font loading is wired, but
+on-device verification (do the fonts actually render, do the new classes produce the right pixel
+values) hasn't happened yet — planned for 2026-08-21. See the write-ups below for the real bugs
+review caught in all of these milestones before they shipped.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -161,7 +165,10 @@ in all three of these milestones before they shipped.
   screens; briefing schema deliberately left unwired until M26 — see notes below)
 - [x] **Milestone 26 — TanStack Query Hooks** (`useTodayBriefing` built, wired to
   `UserBriefingResponseSchema`, verified live on a physical device — see notes below)
-- [ ] Milestones 27–34 — Mobile App (Part 3, remaining)
+- [~] **Milestone 27 — Walris Theme Tokens** (in progress — typography tokens, tailwind spacing/
+  radius extension, and font loading all built; not yet verified on a physical device — see notes
+  below)
+- [ ] Milestones 28–34 — Mobile App (Part 3, remaining)
 - [ ] Milestones 35–50 — Notifications, QA, Deployment & Launch (Part 4)
 
 ## Current Milestone
@@ -180,13 +187,72 @@ it end-to-end on a physical device. M25 added Zod schemas for the briefing and p
 responses, verified against real backend data. M26 built `useTodayBriefing`, wiring the briefing
 schema into a real `useQuery` consumer for the first time and verifying it live on a physical
 device. See the write-ups below for what got built and the real bugs review caught in all three
-before they shipped. **Next up: Milestone 27 — Walris Theme Tokens**, not yet started.
+before they shipped. **Milestone 27 — Walris Theme Tokens — is in progress.** Typography tokens,
+Tailwind spacing/radius extensions, and font loading are all built; on-device verification is the
+one remaining step, planned for 2026-08-21. See the M27 write-up below.
 
 **Milestone 14's core flow is verified end-to-end on a real device** — sign-up → `/category` →
 `/topics` → `/` all confirmed working against the live database. Two smaller pieces of M14 are
 still outstanding (name field, settings screen — see M14 notes below), but the flow itself is no
 longer blocked. The personalization pivot is fully planned in
 `docs/08-personalization-pivot-plan.md`.
+
+### Milestone 27 — Walris Theme Tokens (in progress, started 2026-08-20)
+
+Per `docs/03`'s M27 scope: make `docs/04-design-system.md`'s approved typography, spacing, and
+shape system real, usable tokens — checked first and found colors were already done (verified by
+converting `global.css`'s HSL values back to `docs/04`'s hex, e.g. `--background: 231 100%
+98.6%` = exactly `#f8f9ff`), seeded correctly back in Milestone 4. User decision 2026-08-20: leave
+colors where they are rather than consolidating into a `mobile/theme/` folder, since that would
+duplicate what NativeWind's CSS-variable model already provides correctly.
+
+**What got built:**
+
+- `mobile/theme/typography.ts` — 8 type-scale tokens (`displayLg`, `displayLgMobile`, `headlineMd`,
+  `headlineSm`, `bodyLg`, `bodyMd`, `caption`, `dataLabel`), each a plain `TextStyle` object
+  bundling `fontFamily`/`fontSize`/`fontWeight`/`lineHeight`/`letterSpacing` — plain objects rather
+  than Tailwind classes, since NativeWind's `text-*` utilities only cover `fontSize` and Walris's
+  tokens are multi-property bundles.
+- Real constraint found and resolved: `docs/04` §5.1 specifies `headline-md`/`headline-sm` at
+  weight 600, but the actual `@expo-google-fonts/libre-caslon-text` package only ships 400
+  (Regular) and 700 (Bold) — no 600/SemiBold file exists to load. User decided: load the 700 Bold
+  file (closer to 600 than Regular) while keeping the token's `fontWeight` metadata at 600 to match
+  `docs/04`'s declared intent.
+- `tailwind.config.js` extended: a fixed `borderRadius` scale (`sm`/`DEFAULT`/`md`/`lg`/`xl`/`full`)
+  per `docs/04` §8, replacing the old shadcn boilerplate that derived `lg`/`md`/`sm` from a single
+  `--radius` CSS variable via `calc()` (now removed from `global.css` as dead code); and a `spacing`
+  scale with named aliases (`xs` through `3xl`) per `docs/04` §6's 8px system, layered on top of
+  Tailwind's existing numeric spacing (both resolve to the same pixel values).
+- `app/_layout.tsx` — `useFonts()` loading the four actual font weights `typography.ts` references
+  (`LibreCaslonText_700Bold`, `Inter_400Regular`, `Inter_500Medium`, `JetBrainsMono_500Medium`),
+  gated behind `expo-splash-screen`'s `preventAutoHideAsync`/`hideAsync` so the app doesn't flash
+  fallback system fonts before the real ones load.
+- Dependencies installed via `npx expo install`: `expo-font`, `expo-splash-screen`,
+  `@expo-google-fonts/libre-caslon-text`, `@expo-google-fonts/inter`,
+  `@expo-google-fonts/jetbrains-mono`.
+- A temporary `TypographyDebug` block added to `app/index.tsx` (alongside M26's `BriefingDebug`),
+  rendering one line per token in its actual style, for on-device verification.
+
+**Bugs caught and fixed during review, before any of this shipped:**
+
+- The first draft of `typography.ts` had every token's `fontFamily` set to `'Inter'` regardless of
+  which typeface `docs/04` actually specifies for it — the four Libre Caslon Text headline tokens
+  were pointing at the wrong font family entirely.
+- Several numeric values didn't match `docs/04` §5.1–5.3: `displayLg`/`displayLgMobile`/
+  `headlineMd`/`headlineSm` all had wrong `fontSize`/`lineHeight`, `caption`'s `fontWeight` was 400
+  instead of the spec's 500, and `dataLabel`'s `fontSize`/`lineHeight` were wrong. Several
+  `letterSpacing` values were also off — `docs/04` specifies letter-spacing in `em`, which needed
+  converting to px per token (e.g. `displayLg`: `-0.02em × 48px = -0.96`), not copied as a flat
+  number across different font sizes.
+- All `fontFamily` values were also generic placeholders (`'Inter'`) rather than the actual export
+  names the `@expo-google-fonts/*` packages provide (`Inter_400Regular`, etc.) — without the exact
+  weight-specific name, `useFonts()` has nothing valid to map the style to.
+
+**Still outstanding before this milestone is complete:**
+
+- On-device verification: do all three typefaces actually render (not just fall back to system
+  fonts), and do the new `tailwind.config.js` spacing/radius classes produce the expected pixel
+  values on a real screen. Planned for 2026-08-21.
 
 ### Milestone 26 — TanStack Query Hooks (complete, 2026-08-20)
 
@@ -2116,14 +2182,21 @@ EXPO_PUBLIC_API_BASE_URL
 
 *(Rewritten 2026-08-09, updated 2026-08-10, updated 2026-08-11 (twice), updated 2026-08-14, updated
 2026-08-15, updated 2026-08-17 (M22/M23 both closed), updated 2026-08-19, updated 2026-08-20 (M24/M25
-closed), updated 2026-08-20 (`redirectAfterAuth` fix confirmed live), updated again 2026-08-20 (M26
-closed) — item 1 below now points to Milestone 27.)*
+closed), updated 2026-08-20 (`redirectAfterAuth` fix confirmed live), updated 2026-08-20 (M26
+closed), updated again 2026-08-20 — Milestone 27 is in progress, not yet complete; item 1 below is
+now specifically about finishing it.)*
 
-1. **PRIORITY when resuming: start Milestone 27 — Walris Theme Tokens.** Design tokens (colors,
-   typography, spacing, radius) centralized under `mobile/theme/`, matching the approved Walris
-   design direction — unchanged from the roadmap's original pre-pivot scope. Also worth deciding
-   when to remove the temporary `BriefingDebug` block from `app/index.tsx` (added for M26
-   verification) — either now, or leave it until M32 replaces it with the real Home Screen.
+1. **PRIORITY when resuming (2026-08-21): finish Milestone 27.** Typography tokens, Tailwind
+   spacing/radius extensions, and font loading are all built. What's left is on-device
+   verification — reload the app and check the temporary `TypographyDebug` block (`app/index.tsx`):
+   do all three typefaces (Libre Caslon Text, Inter, JetBrains Mono) actually render distinctly, or
+   does anything silently fall back to the system font? Also worth a quick visual check that the
+   new `rounded-*`/spacing classes look right (`components/ui/button.tsx`/`badge.tsx` are the only
+   current consumers of the changed radius scale). Once confirmed, formally check off Milestone 27
+   above and move to Milestone 28. (Decided 2026-08-20: the temporary `BriefingDebug` block in
+   `app/index.tsx` stays as-is until Milestone 32 replaces it with the real Home Screen — not
+   removed early. `TypographyDebug` should similarly be removed once a real screen applies these
+   tokens.)
 2. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
 3. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12
