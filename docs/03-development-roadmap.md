@@ -1035,8 +1035,50 @@ screen milestone needs to hardcode a font, spacing value, or radius by hand.
 
 ## Milestone 28 — App Layout Shell
 
-Unchanged from the original scope: safe area handling, page container, scroll layout, standard
-spacing and margins, reusable across every future screen.
+### Objective
+
+Give every screen one shared layout wrapper instead of each handling safe areas, scrolling, and
+page margins independently — which right now they do inconsistently. Checked the actual code
+first: `app/index.tsx` wraps in `SafeAreaView` with no margin at all; `(onboarding)/category.tsx`
+and `(onboarding)/topics.tsx` wrap in `ScrollView` directly with **no `SafeAreaView`** and no
+margin either. This isn't a hypothetical future problem — it's the current state.
+
+### Deliverables
+
+- `mobile/components/ui/screen.tsx` — a `Screen` component (kebab-case filename, matching every
+  other file in `components/ui/`) combining:
+  - `SafeAreaView` (`react-native-safe-area-context`, already a dependency and already used in
+    `index.tsx`).
+  - Optional scrolling via a `scroll?: boolean` prop — `index.tsx` currently doesn't scroll,
+    `category.tsx`/`topics.tsx` do, so this needs to stay a per-screen choice, not hardcoded either
+    way.
+  - Horizontal page margin using M27's `md` spacing token (`1rem`/16px), matching `docs/04` §7.1's
+    mobile margin spec exactly.
+- Migrate the three existing screens (`index.tsx`, `category.tsx`, `topics.tsx`) onto `Screen`,
+  removing their own ad hoc `SafeAreaView`/`ScrollView` usage.
+
+### Acceptance Criteria
+
+- All three migrated screens render correctly on a physical device: safe area respected
+  (no content under the notch/status bar), consistent 16px horizontal margin, and scroll behavior
+  unchanged from before the migration (`index.tsx` still doesn't scroll, the onboarding screens
+  still do).
+- No screen in the app constructs its own `SafeAreaView` directly anymore.
+
+### Definition of Done
+
+Every screen gets consistent safe-area handling and page margins through one shared component, and
+adding a new screen never requires re-deciding how to handle either.
+
+### Suggested Commit
+
+`feat: add shared Screen layout component`
+
+### Claude Code Tutor Prompt
+
+> Help me build a reusable screen layout wrapper for Walris that handles safe areas, optional
+> scrolling, and consistent page margins. Explain why hardcoding scroll behavior into the wrapper
+> would be the wrong call here.
 
 ## Milestone 29 — Daily Briefing Header
 

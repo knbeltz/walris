@@ -1,17 +1,19 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-08-20 (Milestone 27 — Walris Theme Tokens — is in progress, not yet complete.
-Colors were already correctly wired (verified during scoping — see the M27 write-up below), so this
-milestone covers what was actually missing: typography and the rest of the spacing/radius system.
-`mobile/theme/typography.ts`'s 8 type-scale tokens now match `docs/04` §5.1–5.3 exactly (fixed
-several real value mismatches — see write-up), `tailwind.config.js` got the full spacing/radius
-scale from `docs/04` §6/§8, and `app/_layout.tsx` now loads the four actual font weights those
-tokens reference via `useFonts` + a splash-screen gate. **Not yet done: on-device verification** —
-a temporary `TypographyDebug` block was added to `app/index.tsx` (alongside M26's `BriefingDebug`)
-to check whether all three typefaces actually render correctly and the new spacing/radius classes
-produce the right pixel values; this hasn't been checked on a physical device yet, planned for
-2026-08-21. Milestone 26 closed out earlier the same day; see its write-up below.)
+**Last Updated:** 2026-08-21 (Milestone 28 — App Layout Shell — is complete. Checked the actual code
+before starting: `index.tsx` wrapped in `SafeAreaView` with no margin, while `category.tsx`/
+`topics.tsx` wrapped in `ScrollView` directly with **no `SafeAreaView` at all** — a real,
+inconsistent gap, not a hypothetical one. `components/ui/screen.tsx`'s `Screen` component (safe
+area + optional `scroll` prop + M27's `md` spacing-token margin) now wraps all three, migrated off
+their ad hoc wrapping. Review caught a real correctness gap during the migration: `topics.tsx`'s
+loading/error/no-preferences-yet early returns were rendering bare `<Text>` entirely outside
+`<Screen>`, bypassing safe-area handling and margin for exactly the states a user sees first — now
+wrapped in `<Screen>` too. Confirmed live on a physical device via a full fresh onboarding run (the
+test user's `category`/`additional_topics` were reset to `null`/`[]` in the database to force the
+whole sign-up → category → topics flow, including the loading state that was just fixed) — safe
+area, scroll behavior, and margins all correct across all three screens. Milestone 27 closed out
+earlier the same day; see its write-up below.)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -115,11 +117,13 @@ briefing schema is verified but deliberately not wired to a consumer yet, since 
 M26's `useTodayBriefing` hook. **Milestone 26 (TanStack Query Hooks) is complete** —
 `useTodayBriefing` wraps `apiFetch`/`UserBriefingResponseSchema` in a `useQuery`, gated on Clerk
 being ready, giving that schema its first real consumer. Verified live on a physical device via a
-temporary debug block on the home screen. **Milestone 27 (Walris Theme Tokens) is in progress** —
-typography tokens and spacing/radius Tailwind extensions are built and font loading is wired, but
-on-device verification (do the fonts actually render, do the new classes produce the right pixel
-values) hasn't happened yet — planned for 2026-08-21. See the write-ups below for the real bugs
-review caught in all of these milestones before they shipped.
+temporary debug block on the home screen. **Milestone 27 (Walris Theme Tokens) is complete** —
+typography tokens and spacing/radius Tailwind extensions are built, font loading is wired, and both
+were confirmed live on a physical device 2026-08-21. **Milestone 28 (App Layout Shell) is also
+complete** — a shared `Screen` component now handles safe areas, optional scrolling, and page
+margins for every screen, migrated off each screen's own inconsistent ad hoc handling, verified
+live via a full fresh onboarding run. See the write-ups below for the real bugs review caught in
+all of these milestones before they shipped.
 
 - GitHub repo: https://github.com/knbeltz/walris (private)
 - Local path: `/Users/kaibeltz/Desktop/Coding Projects/walris`
@@ -165,10 +169,12 @@ review caught in all of these milestones before they shipped.
   screens; briefing schema deliberately left unwired until M26 — see notes below)
 - [x] **Milestone 26 — TanStack Query Hooks** (`useTodayBriefing` built, wired to
   `UserBriefingResponseSchema`, verified live on a physical device — see notes below)
-- [~] **Milestone 27 — Walris Theme Tokens** (in progress — typography tokens, tailwind spacing/
-  radius extension, and font loading all built; not yet verified on a physical device — see notes
-  below)
-- [ ] Milestones 28–34 — Mobile App (Part 3, remaining)
+- [x] **Milestone 27 — Walris Theme Tokens** (typography tokens, tailwind spacing/radius
+  extension, and font loading all built and verified live on a physical device 2026-08-21 — see
+  notes below)
+- [x] **Milestone 28 — App Layout Shell** (shared `Screen` component built, migrated onto all
+  three existing screens, verified live on a physical device 2026-08-21 — see notes below)
+- [ ] Milestones 29–34 — Mobile App (Part 3, remaining)
 - [ ] Milestones 35–50 — Notifications, QA, Deployment & Launch (Part 4)
 
 ## Current Milestone
@@ -181,15 +187,16 @@ notifications (backend scope), a full integration test pass, and the admin-trigg
 surface M23 needed. See the M22/M23 write-ups below for exactly how both closed on 2026-08-17, in
 one combined live run rather than two separate ones.
 
-**Milestones 24, 25, and 26 — the start of Part 3 (Mobile App, M24–34) — are all complete.** M24
+**Milestones 24 through 28 — the start of Part 3 (Mobile App, M24–34) — are all complete.** M24
 built the shared `apiClient.ts` fetch wrapper (per `docs/02` §13/§14, `docs/08` §3/§10) and verified
 it end-to-end on a physical device. M25 added Zod schemas for the briefing and preferences
 responses, verified against real backend data. M26 built `useTodayBriefing`, wiring the briefing
 schema into a real `useQuery` consumer for the first time and verifying it live on a physical
-device. See the write-ups below for what got built and the real bugs review caught in all three
-before they shipped. **Milestone 27 — Walris Theme Tokens — is in progress.** Typography tokens,
-Tailwind spacing/radius extensions, and font loading are all built; on-device verification is the
-one remaining step, planned for 2026-08-21. See the M27 write-up below.
+device. M27 built typography tokens, Tailwind spacing/radius extensions, and font loading. M28
+built the shared `Screen` layout component and migrated every screen onto it. All confirmed live on
+a physical device 2026-08-21. See the write-ups below for what got built and the real bugs review
+caught in each before they shipped. **Next up: Milestone 29 — Daily Briefing Header**, not yet
+started.
 
 **Milestone 14's core flow is verified end-to-end on a real device** — sign-up → `/category` →
 `/topics` → `/` all confirmed working against the live database. Two smaller pieces of M14 are
@@ -197,7 +204,40 @@ still outstanding (name field, settings screen — see M14 notes below), but the
 longer blocked. The personalization pivot is fully planned in
 `docs/08-personalization-pivot-plan.md`.
 
-### Milestone 27 — Walris Theme Tokens (in progress, started 2026-08-20)
+### Milestone 28 — App Layout Shell (complete, 2026-08-21)
+
+Per `docs/03`'s M28 scope: give every screen one shared layout wrapper instead of each handling
+safe areas, scrolling, and page margins independently. Checked the real code before writing this
+milestone's plan: `index.tsx` wrapped in `SafeAreaView` with no margin at all, while
+`category.tsx`/`topics.tsx` wrapped in `ScrollView` directly with no `SafeAreaView` and no margin
+either — a real, current inconsistency, not a hypothetical future one.
+
+**What got built:**
+
+- `mobile/components/ui/screen.tsx` — a `Screen` component: `SafeAreaView` wrapping an optional
+  `ScrollView` (via a `scroll?: boolean` prop, kept per-screen since `index.tsx` doesn't scroll but
+  the onboarding screens do) and a `px-md` horizontal margin, using M27's `md` spacing token
+  (16px), matching `docs/04` §7.1's mobile margin spec exactly.
+- Migrated `index.tsx`, `category.tsx`, and `topics.tsx` onto it, removing their own ad hoc
+  `SafeAreaView`/`ScrollView` usage.
+
+**Bugs caught and fixed during review, before any of this shipped:**
+
+- `topics.tsx`'s three early-return states — `isLoading`, `fetchError`, and
+  `savedPreferences === null` — were returning bare `<Text>` entirely outside `<Screen>`, bypassing
+  safe-area handling and margin for exactly the states a user sees first when opening the screen.
+  `category.tsx` didn't have this problem since its error state renders inline inside `<Screen>`.
+  Fixed by wrapping all three in `<Screen>`.
+- Leftover unused `ScrollView` imports in both `category.tsx` and `topics.tsx`, left over from
+  before the migration since `Screen` now owns `ScrollView` internally.
+
+**Verification:** confirmed live on a physical device via a full fresh onboarding run — the test
+user's `category`/`additional_topics` were reset to `null`/`[]` directly in the database to force
+the entire sign-up → category → topics flow, including `topics.tsx`'s loading state (the one just
+fixed to render inside `Screen`). Safe area, scroll behavior, and consistent margins all confirmed
+correct across all three screens.
+
+### Milestone 27 — Walris Theme Tokens (complete, 2026-08-20–21)
 
 Per `docs/03`'s M27 scope: make `docs/04-design-system.md`'s approved typography, spacing, and
 shape system real, usable tokens — checked first and found colors were already done (verified by
@@ -248,11 +288,10 @@ duplicate what NativeWind's CSS-variable model already provides correctly.
   names the `@expo-google-fonts/*` packages provide (`Inter_400Regular`, etc.) — without the exact
   weight-specific name, `useFonts()` has nothing valid to map the style to.
 
-**Still outstanding before this milestone is complete:**
-
-- On-device verification: do all three typefaces actually render (not just fall back to system
-  fonts), and do the new `tailwind.config.js` spacing/radius classes produce the expected pixel
-  values on a real screen. Planned for 2026-08-21.
+**On-device verification (2026-08-21):** confirmed on a physical device — all three typefaces
+(Libre Caslon Text, Inter, JetBrains Mono) render correctly via the temporary `TypographyDebug`
+block, and the new spacing/radius Tailwind classes render correctly too (checked via the sign-in/
+sign-up screens' buttons, which use `rounded-lg`/`rounded-md`).
 
 ### Milestone 26 — TanStack Query Hooks (complete, 2026-08-20)
 
@@ -2183,20 +2222,18 @@ EXPO_PUBLIC_API_BASE_URL
 *(Rewritten 2026-08-09, updated 2026-08-10, updated 2026-08-11 (twice), updated 2026-08-14, updated
 2026-08-15, updated 2026-08-17 (M22/M23 both closed), updated 2026-08-19, updated 2026-08-20 (M24/M25
 closed), updated 2026-08-20 (`redirectAfterAuth` fix confirmed live), updated 2026-08-20 (M26
-closed), updated again 2026-08-20 — Milestone 27 is in progress, not yet complete; item 1 below is
-now specifically about finishing it.)*
+closed), updated 2026-08-21 (M27 confirmed live and closed), updated again 2026-08-21 (M28 confirmed
+live and closed) — item 1 below now points to Milestone 29.)*
 
-1. **PRIORITY when resuming (2026-08-21): finish Milestone 27.** Typography tokens, Tailwind
-   spacing/radius extensions, and font loading are all built. What's left is on-device
-   verification — reload the app and check the temporary `TypographyDebug` block (`app/index.tsx`):
-   do all three typefaces (Libre Caslon Text, Inter, JetBrains Mono) actually render distinctly, or
-   does anything silently fall back to the system font? Also worth a quick visual check that the
-   new `rounded-*`/spacing classes look right (`components/ui/button.tsx`/`badge.tsx` are the only
-   current consumers of the changed radius scale). Once confirmed, formally check off Milestone 27
-   above and move to Milestone 28. (Decided 2026-08-20: the temporary `BriefingDebug` block in
-   `app/index.tsx` stays as-is until Milestone 32 replaces it with the real Home Screen — not
-   removed early. `TypographyDebug` should similarly be removed once a real screen applies these
-   tokens.)
+1. **PRIORITY when resuming: start Milestone 29 — Daily Briefing Header.** Unchanged from the
+   roadmap's original pre-pivot scope. Now that `Screen` (M28) and the typography tokens (M27)
+   both exist, this is the first real screen-content milestone that gets to use them together.
+   (Reminder: the temporary `BriefingDebug` and `TypographyDebug` blocks in `app/index.tsx` are
+   still there deliberately — `BriefingDebug` stays until Milestone 32 builds the real Home Screen;
+   `TypographyDebug` should come out once a real screen applies the typography tokens. The test
+   user's `category`/`additional_topics` were reset to `null`/`[]` for M28's device verification —
+   they'll need re-selecting via the app, or the daily pipeline won't generate a briefing for this
+   user until then.)
 2. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
 3. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12
