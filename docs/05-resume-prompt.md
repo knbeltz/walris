@@ -1,26 +1,21 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-08-24 (Backend indicator-data extension — the real blocker for Milestone 30
-— is resolved. `GET /v1/users/me/briefing` now returns structured indicator data
-(`indicators: IndicatorSeries[]`) alongside the narrative, not just prose. This closes a gap
-documented back in M25: `DailyDataItem` (real FRED/FMP values, fetched daily) existed in the
-database but was never exposed through any API endpoint — the mobile app had no way to get the
-actual numbers behind a briefing, only the AI-generated sentences describing them. Also resolved
-along the way: `DailyDataItem` rows used to get deleted after 48 hours (`daily_data_service.py`'s
-cleanup step), meaning no real historical trend data could ever accumulate — retention is now
-~400 days (`STALE_DATA_HOURS = 400 * 24`), chosen after confirming storage cost is trivial (39
-fixed FRED series × ~1 year ≈ 20k rows). No backfill is possible for data already deleted under the
-old 48-hour window — real history starts accumulating from 2026-08-24 forward. See the write-up
-below for the several real bugs review caught along the way (a broken `.all()` placement, a raw
-`DailyDataItem` list passed where `IndicatorSeries` objects were expected, `dict[X]` instead of
-`dict(X)`, a positional arg to a Pydantic model, and a duplicate class definition that silently
-shadowed the original schema). Verified end-to-end for real, including on a physical device:
-`GET /v1/users/me/briefing` → `mobile/schemas/briefings.ts`'s extended
-`UserBriefingResponseSchema` → `useTodayBriefing` → rendered in `app/index.tsx`'s `BriefingDebug`
-block, showing real indicator labels and values. Milestone 30 itself (the actual chart component)
-has not been started — this was purely the data-availability prerequisite. Milestone 29 closed out
-2026-08-21; see its write-up below.)
+**Last Updated:** 2026-08-24 (Milestone 31 — Supporting News Cards — is in progress, backend side
+done. `GET /v1/users/me/briefing` now also returns `news: NewsItem[]` — up to 5 real, deduplicated,
+most-recently-published Marketaux articles relevant to the user, closing the same
+data-availability gap M25 flagged for news (`DailyDataNews` existed in the database, linked to
+`DailyDataItem`, but was never exposed through any endpoint). Reused the existing
+`get_user_daily_data_with_news(user, as_of)` read-only (same safe pattern as M30's indicator
+extension) rather than modifying it. Review caught the same category of bug M30 had — the
+flatten/dedupe/sort/cap logic (verified correct against real data: exactly 5 items, properly
+sorted newest-first) initially passed raw `DailyDataNews` ORM objects directly where `NewsItem`
+Pydantic objects were expected; mypy did not catch this one (its inference through the
+`dict(...).values()` → `sorted()` chain lost precision), a real `ValidationError` on live data
+did. Fixed with an explicit mapping step. **Still outstanding:** the mobile
+`NewsItemSchema`/`UserBriefingResponseSchema` extension and the actual `NewsCard` component.
+Milestone 30 (Key Indicator Chart) was deferred 2026-08-24, not part of V1 — see that section
+below. Milestone 29 closed out 2026-08-21.)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -190,7 +185,10 @@ bugs review caught in all of these milestones before they shipped.
   end-to-end 2026-08-24 — see notes below
 - [~] **Milestone 30 — Key Indicator Chart Component** (deferred 2026-08-24, not part of V1 —
   see notes below)
-- [ ] Milestones 31–34 — Mobile App (Part 3, remaining)
+- [~] **Milestone 31 — Supporting News Cards** (in progress — backend done, `news: NewsItem[]`
+  returned and verified against real data; mobile schema and `NewsCard` component still
+  outstanding — see notes below)
+- [ ] Milestones 32–34 — Mobile App (Part 3, remaining)
 - [ ] Milestones 35–50 — Notifications, QA, Deployment & Launch (Part 4)
 
 ## Current Milestone
@@ -218,14 +216,60 @@ real bugs review caught in each before they shipped. **The backend indicator-dat
 Component) itself is deferred, not part of V1** — decided after scoping it out: most indicators
 only have 1-2 data points right now, so a chart showing the same near-static picture every day a
 user opens the app doesn't earn its place yet. Revisit once real history accumulates. `docs/03`'s
-M32 (Home Screen) no longer assembles a chart. **Next up: Milestone 31 — Supporting News Cards**,
-not yet started.
+M32 (Home Screen) no longer assembles a chart. **Milestone 31 (Supporting News Cards) is in
+progress** — backend done (`GET /v1/users/me/briefing` now returns `news: NewsItem[]`, up to 5
+deduplicated, most-recent relevant articles), mobile schema and `NewsCard` component still
+outstanding. See that write-up below.
 
 **Milestone 14's core flow is verified end-to-end on a real device** — sign-up → `/category` →
 `/topics` → `/` all confirmed working against the live database. Two smaller pieces of M14 are
 still outstanding (name field, settings screen — see M14 notes below), but the flow itself is no
 longer blocked. The personalization pivot is fully planned in
 `docs/08-personalization-pivot-plan.md`.
+
+### Milestone 31 — Supporting News Cards (in progress, backend done, started 2026-08-24)
+
+Per `docs/03`'s M31 scope: expose real Marketaux articles alongside the narrative — same
+data-availability gap M25 flagged for news as it did for indicators (`DailyDataNews` existed in
+the database, linked to `DailyDataItem` via `item_id`, but was never exposed through any API
+endpoint).
+
+**Scope decision:** tested against a real date with actual fetched data (2026-08-17) — one user's
+relevant news came back as 125 rows, 96 unique URLs. "Supporting" cards, not a full feed — capped
+at 5, deduplicated by `url`, sorted by `published_at` descending (most recent first).
+
+**What got built (backend):**
+
+- `backend/app/schemas/user_briefing.py`: new `NewsItem` schema (`headline`, `source`, `summary`,
+  `published_at: datetime`, `url`, `sentiment: float | None`), matching `docs/04` §10.7's required
+  fields except "topic" (no such field exists on `DailyDataNews`; `sentiment` is the only tag data
+  available). `UserBriefingResponse` extended with `news: list[NewsItem]`.
+- `backend/app/routers/briefings.py`: reused the existing `get_user_daily_data_with_news(user,
+  as_of)` — the same function that already combines relevant FRED + FMP items with linked news for
+  the AI prompt — called read-only, not modified (avoiding M30's mistake of editing a live-pipeline
+  function in place). Flattens all items' `.news` tuples into one list, dedupes by `url`, sorts by
+  `published_at` descending, takes the first 5, then maps each real `DailyDataNews` row into a
+  `NewsItem`.
+
+**Bugs caught and fixed during review, before any of this shipped:**
+
+- The flatten/dedupe/sort/cap logic itself was correct on the first pass (verified: exactly 5
+  items from a real 96-unique-URL test case, properly sorted newest-first) — but the raw
+  `DailyDataNews` ORM objects were passed directly as `news=` where `list[NewsItem]` was expected.
+  Notably, **mypy did not catch this one** (`mypy` passed clean) — its type inference through the
+  `{n.url: n for n in all_news}.values()` → `sorted(...)` chain apparently lost precision somewhere
+  along the way. A real end-to-end test against live data caught it instead: a genuine
+  `pydantic.ValidationError` ("Input should be a valid dictionary or instance of NewsItem",
+  ×5). Fixed with an explicit `NewsItem(...)` mapping step per row. Worth remembering: mypy passing
+  is not sufficient proof of correctness for Pydantic model construction through several chained
+  built-ins — real-data verification still matters even when the type checker is silent.
+
+**Still outstanding:** `mobile/schemas/briefings.ts`'s `NewsItemSchema` (mirroring the backend
+field-for-field, same pattern as `IndicatorPointSchema`/`IndicatorSeriesSchema`) and
+`UserBriefingResponseSchema` extension; the `mobile/components/ui/news-card.tsx` `NewsCard`
+component itself, per `docs/04` §10.7's style (12px radius, headline in `headlineSm`, summary in
+`bodyMd`, source/sentiment tag in `dataLabel`); wiring into `app/index.tsx` for on-device
+verification.
 
 ### Backend: Briefing Endpoint Indicator Data Extension (complete, 2026-08-24)
 
@@ -2343,20 +2387,21 @@ EXPO_PUBLIC_API_BASE_URL
 closed), updated 2026-08-20 (`redirectAfterAuth` fix confirmed live), updated 2026-08-20 (M26
 closed), updated 2026-08-21 (M27 confirmed live and closed), updated 2026-08-21 (M28 confirmed live
 and closed), updated 2026-08-21 (M29 confirmed live and closed), updated 2026-08-24 (backend
-indicator-data extension resolved M30's real blocker), updated again 2026-08-24 (M30 itself
-deferred, not part of V1) — item 1 below now points to Milestone 31.)*
+indicator-data extension resolved M30's real blocker), updated 2026-08-24 (M30 itself deferred, not
+part of V1), updated again 2026-08-24 (M31 backend done, mobile side started) — item 1 below is now
+about finishing M31's mobile side.)*
 
-1. **PRIORITY when resuming: start Milestone 31 — Supporting News Cards.** Milestone 30 (Key
-   Indicator Chart Component) is deferred, not part of V1 — decided after scoping it out: most
-   indicators only have 1-2 data points right now (the 400-day retention just started 2026-08-24),
-   so a chart showing a near-static picture every day a user opens the app doesn't earn its place
-   yet. Revisit once real history accumulates — see `docs/03`'s M30 section for the scoping work
-   kept as reference (indicator-selection logic, chart library choice). The underlying `indicators`
-   API data itself is still shipped and useful regardless of the deferral. `docs/03`'s M32 (Home
-   Screen) has been updated to no longer assemble a chart. (Reminder: the temporary `BriefingDebug`
+1. **PRIORITY when resuming: finish Milestone 31 — Supporting News Cards (mobile side).** Backend
+   is done and verified — `GET /v1/users/me/briefing` returns `news: NewsItem[]` (up to 5
+   deduplicated, most-recent relevant articles). Still needed: `mobile/schemas/briefings.ts`'s
+   `NewsItemSchema`/`UserBriefingResponseSchema` extension (mirror the backend field-for-field,
+   same pattern as the indicator schema), the `NewsCard` component per `docs/04` §10.7's style, and
+   wiring into `app/index.tsx` for on-device verification. (Reminder: the temporary `BriefingDebug`
    and `TypographyDebug` blocks in `app/index.tsx` are still there deliberately — `BriefingDebug`
    stays until Milestone 32 builds the real Home Screen; `TypographyDebug` should come out once a
-   real screen applies the typography tokens.)
+   real screen applies the typography tokens. Milestone 30, Key Indicator Chart Component, is
+   deferred — not part of V1 — see `docs/03`'s M30 section for why and for the scoping work kept
+   as reference.)
 2. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
 3. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12

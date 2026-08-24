@@ -1224,8 +1224,67 @@ Screen.
 
 ## Milestone 31 — Supporting News Cards
 
+### Objective
+
 Replaces "News Article Cards" (previously Milestone 37, tied to an individual event's detail page).
-Cards linking out to the source Marketaux articles behind that day's personalized narrative.
+Cards linking out to the source Marketaux articles behind that day's personalized narrative — same
+data-availability gap as Milestone 30 had: `DailyDataNews` (real Marketaux articles, headline,
+source, summary, published time, sentiment, URL) exists in the database, linked to
+`DailyDataItem` rows, but is never exposed through any API endpoint. This milestone closes that
+gap and builds the cards.
+
+**Scope decision (2026-08-24):** tested against a real date with actual fetched data (2026-08-17,
+since today hasn't been fetched yet) — one user's relevant news came back as **125 rows, 96 unique
+URLs**. The milestone's own name is "Supporting" cards, not a full feed — showing all of them would
+dominate the screen the same way M30's chart would have. There's also no existing ranking; the
+backend function returns them in arbitrary query order. Resolved: dedupe by `url`, sort by
+`published_at` descending, cap at **5** cards — simple, defensible ("most recent first"), no new
+ranking logic needed.
+
+### Deliverables
+
+- Backend: reuse `openai_service.py`'s existing `get_user_daily_data_with_news(user, as_of)` — the
+  same function that already combines relevant FRED + FMP items with their linked news for the AI
+  prompt, called read-only from the router (same pattern M30's indicator extension used with
+  `get_relevant_fred_item_keys`, not a modification of the existing function).
+  - New `NewsItem` schema (`backend/app/schemas/user_briefing.py`): `headline`, `source`,
+    `summary`, `published_at`, `url`, `sentiment: float | None` — matching `docs/04` §10.7's
+    required fields (Publisher, headline, summary, published time, sentiment tag) except "topic,"
+    which doesn't exist as a field on `DailyDataNews` — `sentiment` is the only tag data available.
+  - `UserBriefingResponse` extended with `news: list[NewsItem]`.
+  - `briefings.py`: flatten `get_user_daily_data_with_news(user, today).news` across all relevant
+    items, dedupe by `url`, sort by `published_at` descending, take the first 5.
+- Mobile: `mobile/schemas/briefings.ts`'s `NewsItemSchema` + `UserBriefingResponseSchema` extended
+  with `news`, mirroring the backend.
+- `mobile/components/ui/news-card.tsx` — a `NewsCard` component per `docs/04` §10.7's style rules:
+  12px radius (M27's `md` radius token), subtle border, headline in `headlineSm` (Libre Caslon
+  Text), summary in `bodyMd` (Inter), source/sentiment tag in `dataLabel` (JetBrains Mono). Tapping
+  a card opens `url` (`Linking.openURL`).
+- Wire a list of `NewsCard`s into `app/index.tsx` (temporarily, same debug-block pattern as the
+  rest of Part 3) using `useTodayBriefing`'s new `news` field.
+
+### Acceptance Criteria
+
+- Renders correctly on a physical device against real data — verified against an actual date with
+  fetched news (today's data won't exist until the daily pipeline runs again), not a mocked list.
+- Never shows duplicate articles (same `url` twice) and never shows more than 5.
+- Tapping a card actually opens the article's real URL.
+
+### Definition of Done
+
+A user's daily briefing surfaces up to 5 real, deduplicated, recent supporting news articles as
+tappable cards, matching `docs/04`'s News Card style — ready for Milestone 32 to place on the real
+Home Screen.
+
+### Suggested Commit
+
+`feat: add supporting news cards`
+
+### Claude Code Tutor Prompt
+
+> Help me expose Walris's linked news articles through the briefing API and render them as cards.
+> Explain why deduplicating by URL matters when the same article can be linked to multiple relevant
+> data items.
 
 ## Milestone 32 — Home Screen
 
