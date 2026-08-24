@@ -13,6 +13,18 @@ class BriefingContent(BaseModel):
     sections: list[BriefingSection]
 
 
+class IndicatorPoint(BaseModel):
+    date: date
+    value: float
+
+
+class IndicatorSeries(BaseModel):
+    item_key: str
+    label: str
+    points: list[IndicatorPoint]
+
+
 class UserBriefingResponse(BaseModel):
     date: date
     content: BriefingContent
+    indicators: list[IndicatorSeries]

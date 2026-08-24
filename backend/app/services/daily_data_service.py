@@ -30,7 +30,7 @@ from app.services.marketaux_service import fetch_all_articles
 
 logger = logging.getLogger(__name__)
 
-STALE_DATA_HOURS = 48
+STALE_DATA_HOURS = 400 * 24  # ~400 days — retained for M30's key-indicator trend charts.
 
 SP_500_SYMBOL = "^GSPC"
 DOW_JONES_SYMBOL = "^DJI"
@@ -314,7 +314,7 @@ def saved_covered_daily_data_candidates(
 
 def delete_stale_daily_data() -> int:
     """
-    Delete DailyDataItem rows fetched more than 48 hours ago.
+    Delete DailyDataItem rows fetched more than STALE_DATA_HOURS ago.
 
     Related DailyDataNews rows are deleted automatically by PostgreSQL
     because DailyDataNews.item_id uses ON DELETE CASCADE.
