@@ -1,17 +1,26 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-08-21 (Milestone 29 — Daily Briefing Header — is complete.
-`components/ui/daily-briefing-header.tsx`'s `DailyBriefingHeader` renders the app name (Libre
-Caslon Text via M27's `headlineMd` token), a time-of-day greeting (`Good Morning`/`Good
-Afternoon`/`Good Evening`, computed from the device's local hour with an 18:00 afternoon/evening
-cutoff — confirmed correct at 17:46 reading "Good Afternoon"), and today's date via `Intl`, wired
-into `app/index.tsx` above the existing debug blocks. Review caught two real bugs before this
-shipped: the component was named `HomeHeader` instead of the spec'd `DailyBriefingHeader`, and the
-afternoon greeting had a typo ("Good Afternon!"). Scoped deliberately to a generic greeting, not
-name-personalized — `User.name` exists as a DB column but nothing sets it yet (still-open M14 loose
-end) — see the M29 write-up below. Milestones 27 and 28 closed out earlier; see their write-ups
-below.)
+**Last Updated:** 2026-08-24 (Backend indicator-data extension — the real blocker for Milestone 30
+— is resolved. `GET /v1/users/me/briefing` now returns structured indicator data
+(`indicators: IndicatorSeries[]`) alongside the narrative, not just prose. This closes a gap
+documented back in M25: `DailyDataItem` (real FRED/FMP values, fetched daily) existed in the
+database but was never exposed through any API endpoint — the mobile app had no way to get the
+actual numbers behind a briefing, only the AI-generated sentences describing them. Also resolved
+along the way: `DailyDataItem` rows used to get deleted after 48 hours (`daily_data_service.py`'s
+cleanup step), meaning no real historical trend data could ever accumulate — retention is now
+~400 days (`STALE_DATA_HOURS = 400 * 24`), chosen after confirming storage cost is trivial (39
+fixed FRED series × ~1 year ≈ 20k rows). No backfill is possible for data already deleted under the
+old 48-hour window — real history starts accumulating from 2026-08-24 forward. See the write-up
+below for the several real bugs review caught along the way (a broken `.all()` placement, a raw
+`DailyDataItem` list passed where `IndicatorSeries` objects were expected, `dict[X]` instead of
+`dict(X)`, a positional arg to a Pydantic model, and a duplicate class definition that silently
+shadowed the original schema). Verified end-to-end for real, including on a physical device:
+`GET /v1/users/me/briefing` → `mobile/schemas/briefings.ts`'s extended
+`UserBriefingResponseSchema` → `useTodayBriefing` → rendered in `app/index.tsx`'s `BriefingDebug`
+block, showing real indicator labels and values. Milestone 30 itself (the actual chart component)
+has not been started — this was purely the data-availability prerequisite. Milestone 29 closed out
+2026-08-21; see its write-up below.)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -176,6 +185,9 @@ bugs review caught in all of these milestones before they shipped.
   three existing screens, verified live on a physical device 2026-08-21 — see notes below)
 - [x] **Milestone 29 — Daily Briefing Header** (`DailyBriefingHeader` built and wired into
   `app/index.tsx`, verified live on a physical device 2026-08-21 — see notes below)
+- [x] *(not a numbered milestone)* **Backend indicator-data extension** — resolved Milestone 30's
+  real blocker; `GET /v1/users/me/briefing` now returns structured `indicators` data, verified
+  end-to-end 2026-08-24 — see notes below
 - [ ] Milestones 30–34 — Mobile App (Part 3, remaining)
 - [ ] Milestones 35–50 — Notifications, QA, Deployment & Launch (Part 4)
 
@@ -198,14 +210,81 @@ device. M27 built typography tokens, Tailwind spacing/radius extensions, and fon
 built the shared `Screen` layout component and migrated every screen onto it. M29 built
 `DailyBriefingHeader` (app name, time-of-day greeting, date) and wired it into the home screen. All
 confirmed live on a physical device 2026-08-21. See the write-ups below for what got built and the
-real bugs review caught in each before they shipped. **Next up: Milestone 30 — Key Indicator Chart
-Component**, not yet started.
+real bugs review caught in each before they shipped. **The backend indicator-data extension
+(2026-08-24) resolved M30's real blocker** — `GET /v1/users/me/briefing` now returns structured
+`indicators` data, not just prose; see that write-up below. **Next up: Milestone 30 — Key Indicator
+Chart Component** itself (the actual chart-rendering component), not yet started.
 
 **Milestone 14's core flow is verified end-to-end on a real device** — sign-up → `/category` →
 `/topics` → `/` all confirmed working against the live database. Two smaller pieces of M14 are
 still outstanding (name field, settings screen — see M14 notes below), but the flow itself is no
 longer blocked. The personalization pivot is fully planned in
 `docs/08-personalization-pivot-plan.md`.
+
+### Backend: Briefing Endpoint Indicator Data Extension (complete, 2026-08-24)
+
+Not a numbered milestone — a backend prerequisite discovered while scoping Milestone 30 (Key
+Indicator Chart Component). `GET /v1/users/me/briefing` only ever returned `date` + `content`
+(headline + prose sections) — no structured indicator values anywhere, even though the real
+numbers exist in the database (`DailyDataItem`, populated daily from FRED). A chart needs real
+numbers, not prose, so this had to be resolved before M30 could start.
+
+**What got built:**
+
+- `backend/app/services/daily_data_service.py`: `STALE_DATA_HOURS` raised from `48` to `400 * 24`
+  (~400 days). `DailyDataItem` rows were being deleted after 48 hours, so no historical trend data
+  could ever accumulate — confirmed via the daily pipeline's own cleanup step
+  (`delete_stale_daily_data`). Storage cost is trivial: only 39 fixed FRED series exist across
+  every category/topic combination, so even a full year of daily snapshots is ~20k rows.
+  `DailyDataNews` cascades off `DailyDataItem` via `ON DELETE CASCADE`, so it now retains for the
+  same window automatically, no separate change needed. **No backfill possible** — data already
+  deleted under the old 48-hour window is gone; real history starts accumulating from 2026-08-24.
+- `backend/app/schemas/user_briefing.py`: new `IndicatorPoint` (`date`, `value`) and
+  `IndicatorSeries` (`item_key`, `label`, `points`) schemas; `UserBriefingResponse` extended with
+  `indicators: list[IndicatorSeries]`.
+- `backend/app/routers/briefings.py`: `get_todays_briefing` now queries `DailyDataItem` filtered by
+  `get_relevant_fred_item_keys(user)` (the same relevance function that already decides what feeds
+  the AI narrative — the chart matches the story instead of drifting from it), groups by
+  `item_key`, and looks up each series' human-readable label from `fred_service.py`'s existing
+  `FRED_INDICATORS` list (no new label mapping needed — it already had real names for all 39
+  series).
+- `mobile/schemas/briefings.ts`: `IndicatorPointSchema`/`IndicatorSeriesSchema` added, mirroring
+  the backend field-for-field, and `UserBriefingResponseSchema` extended with `indicators`.
+
+**Bugs caught and fixed during review, before any of this shipped** (several rounds, since this
+went through more iteration than most changes):
+
+- An edit to `openai_service.py`'s existing `get_relevant_fred_items_for_day` (a *different*,
+  pre-existing function used by the live M18/M19 daily-briefing pipeline — scoped to one day, for
+  the AI prompt) stacked a new, broken implementation on top instead of writing new code elsewhere.
+  The new block had `list(items = session.scalars(...).all())` — invalid keyword argument to
+  `list()`, confirmed via a direct `TypeError`. Since this function feeds the live pipeline, this
+  would have broken generating *any* user's daily briefing, not just the new chart feature. Also
+  silently dropped that function's `source == "fred"` and `date == as_of` filters. Fully reverted
+  to the original working version; the new multi-day, no-date-filter query was written fresh
+  in `briefings.py` instead, where it belongs.
+- `UserBriefingResponse` was defined **twice** in `user_briefing.py` (mypy: `no-redef`) — the
+  second silently shadowed the first, which was missing the new `indicators` field. Merged into one
+  definition.
+- `briefings.py`'s `.all()` was chained onto the `select(...)` statement itself — `Select` objects
+  don't have that method (confirmed: `AttributeError: 'Select' object has no attribute 'all'`).
+  Needed to be on the result of `db.scalars(...)` instead.
+- The raw `DailyDataItem` query result was passed directly as `indicators=items` — wrong shape
+  entirely (`DailyDataItem` has no `label`/`points` fields). The actual grouping-into-`IndicatorSeries`
+  step had to be written.
+- `labels = dict[FRED_INDICATORS]` used type-subscript syntax (square brackets) instead of calling
+  the `dict` constructor (`dict(FRED_INDICATORS)`) — produced a `types.GenericAlias`, not a real
+  dict; confirmed via `TypeError` on `.get()`.
+- `IndicatorSeries(item, label=..., points=...)` passed a positional argument to a Pydantic model
+  (which only accepts keyword arguments) — confirmed via `TypeError`. `item` was also a stale
+  leftover variable from an earlier, already-finished loop, not the intended `key`.
+- The "no briefing yet" fallback branch was initially left without `indicators=` entirely, meaning
+  any freshly-onboarded user would still 500 even after the "found" branch was fixed.
+
+**Verification:** confirmed end-to-end against real data — `get_todays_briefing` called directly
+against the real database returned 32 real indicators with correct labels/values; the same JSON,
+run through the mobile Zod schema, parsed successfully; and on a physical device, `BriefingDebug`
+rendered real indicator labels and values pulled all the way through the real stack.
 
 ### Milestone 29 — Daily Briefing Header (complete, 2026-08-21)
 
@@ -2257,18 +2336,21 @@ EXPO_PUBLIC_API_BASE_URL
 2026-08-15, updated 2026-08-17 (M22/M23 both closed), updated 2026-08-19, updated 2026-08-20 (M24/M25
 closed), updated 2026-08-20 (`redirectAfterAuth` fix confirmed live), updated 2026-08-20 (M26
 closed), updated 2026-08-21 (M27 confirmed live and closed), updated 2026-08-21 (M28 confirmed live
-and closed), updated again 2026-08-21 (M29 confirmed live and closed) — item 1 below now points to
-Milestone 30.)*
+and closed), updated 2026-08-21 (M29 confirmed live and closed), updated again 2026-08-24 (backend
+indicator-data extension resolved M30's real blocker) — item 1 below is now about M30 itself, not
+the prerequisite.)*
 
-1. **PRIORITY when resuming: start Milestone 30 — Key Indicator Chart Component.** A lightweight
-   chart rendering one or more of the FRED indicators referenced in that day's personalized
-   narrative — replaces the old event-detail-page chart. Note the real, still-unresolved gap this
-   runs into (documented in M25's write-up above): the actual `/v1/users/me/briefing` response has
-   no structured indicator data at all, only prose inside `content.sections[].body` — this needs
-   an explicit decision before M30 can pull real chart data, not something to improvise around.
-   (Reminder: the temporary `BriefingDebug` and `TypographyDebug` blocks in `app/index.tsx` are
-   still there deliberately — `BriefingDebug` stays until Milestone 32 builds the real Home Screen;
-   `TypographyDebug` should come out once a real screen applies the typography tokens.)
+1. **PRIORITY when resuming: start Milestone 30 — Key Indicator Chart Component itself.** The data
+   blocker is resolved (see the write-up above) — `GET /v1/users/me/briefing` now returns
+   `indicators: IndicatorSeries[]`, verified end-to-end including on a physical device. What's left
+   is the actual chart-rendering component: a lightweight chart rendering one or more of the
+   relevant FRED indicators, replacing the old event-detail-page chart. This hasn't been expanded
+   into a full roadmap section yet — same pattern as the last several milestones, worth doing that
+   first. (Reminder: the temporary `BriefingDebug` and `TypographyDebug` blocks in `app/index.tsx`
+   are still there deliberately — `BriefingDebug` stays until Milestone 32 builds the real Home
+   Screen; `TypographyDebug` should come out once a real screen applies the typography tokens.
+   `BriefingDebug` was extended to show `indicators` data for the backend-extension verification —
+   worth deciding whether that stays or gets trimmed once M30's real chart component exists.)
 2. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
 3. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12
