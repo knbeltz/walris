@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
@@ -24,7 +24,17 @@ class IndicatorSeries(BaseModel):
     points: list[IndicatorPoint]
 
 
+class NewsItem(BaseModel):
+    headline: str
+    source: str
+    summary: str
+    published_at: datetime
+    url: str
+    sentiment: float | None
+
+
 class UserBriefingResponse(BaseModel):
     date: date
     content: BriefingContent
     indicators: list[IndicatorSeries]
+    news: list[NewsItem]
