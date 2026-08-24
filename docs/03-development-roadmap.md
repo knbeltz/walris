@@ -1137,9 +1137,90 @@ name/date/greeting markup.
 
 ## Milestone 30 — Key Indicator Chart Component
 
+**Deferred (2026-08-24), not part of V1.** After scoping this out (below), decided the chart isn't
+worth shipping yet: most indicators only have 1-2 data points right now (the 400-day retention
+just started), so a chart showing the same near-static picture every single day doesn't earn its
+place on a screen a user opens daily — it directly conflicts with `docs/04`'s own "don't make the
+chart dominant" rule in a different way than expected (dominant by repetition/staleness, not by
+size). Revisit once enough real history has accumulated for a trend to actually be visible
+day-to-day. The scoping work below (indicator-selection logic, chart library choice) stays as
+reference for whenever this gets picked back up — the backend `indicators` data itself (Milestone
+30's actual blocker) is already shipped and useful regardless. Milestone 32 (Home Screen) no longer
+assembles a chart — see its updated scope.
+
+### Objective
+
 Replaces the old "Basic Historical Chart" (previously an event-detail-page feature, Milestone 38).
-Now a Home Screen building block: a lightweight chart rendering one or more of the FRED indicators
-referenced in that day's personalized narrative, rather than a chart tied to one discrete event.
+Now a Home Screen building block: a lightweight chart rendering the user's single key FRED
+indicator, per `docs/04` §10.8's rules — simple, not the dominant element on the screen, trend
+clearly visible.
+
+**Scope decision (2026-08-24):** the backend extension (see `docs/05`'s write-up) returns up to 32
+relevant indicators per user — but the milestone's own name is *"Key Indicator"* (singular), and
+`docs/04` explicitly says not to let the chart dominate. There's no existing "most important
+indicator" ranking anywhere in the codebase — `get_relevant_fred_item_keys` returns everything
+relevant to a category/topic, unranked. Rather than charting all 32 (violates "keep it simple") or
+picking an arbitrary one (the first alphabetically, meaningless), this milestone adds a small,
+explicit `CATEGORY_PRIMARY_INDICATOR` mapping — one deliberately-chosen FRED series per category,
+confirmed already present in that category's relevant set:
+
+```text
+investor              -> DGS10          (10-Year Treasury Yield)
+small_business_owner  -> MPRIME         (Prime Rate)
+consumer               -> CPIAUCSL       (Consumer Price Index)
+home                   -> MORTGAGE30US   (30-Year Fixed Mortgage Rate)
+student                -> UNRATE         (Unemployment Rate)
+job_seeker             -> UNRATE         (Unemployment Rate)
+everything             -> CPIAUCSL       (Consumer Price Index)
+```
+
+**Real data caveat:** the backend's 400-day retention only started 2026-08-24 (see `docs/05`) —
+most indicators currently have just 1-2 data points, not a real trend line yet. The chart needs to
+render sensibly with sparse data (e.g. a single point, or two) today, and grow into a real trend
+view as history accumulates. Not something to fake or pad with synthetic points.
+
+### Deliverables
+
+- Backend: `CATEGORY_PRIMARY_INDICATOR: dict[str, str]` (likely in `fmp_category_rules.py`,
+  alongside the existing `CATEGORY_ITEM_KEYS`), and a small addition to `get_todays_briefing` (or a
+  new field on the response) surfacing which of the returned `indicators` is the user's primary
+  one — e.g. a `primary_item_key: str | None` field on `UserBriefingResponse`, so the mobile app
+  doesn't need to duplicate the category→indicator mapping client-side.
+- Mobile: install a charting dependency — `react-native-svg` (`npx expo install react-native-svg`)
+  is the recommended choice: lightweight, no heavy native charting engine, and gives full control
+  to hand-build a simple line/sparkline matching `docs/04`'s "keep it simple" directive, rather
+  than pulling in a full charting library's defaults (axes, legends, etc.) that would need
+  stripping down anyway.
+- `mobile/components/ui/key-indicator-chart.tsx` — a `KeyIndicatorChart` component: given an
+  `IndicatorSeries`, renders a simple SVG line (or a single labeled point when there's only one
+  data point), the indicator's `label`, and its latest value — matching §10.8's "include latest
+  value context" rule.
+- Wire it into `app/index.tsx` (temporarily, same pattern as the other debug/verification blocks)
+  using `useTodayBriefing`'s data and the new `primary_item_key` to pick the right series out of
+  `indicators`.
+
+### Acceptance Criteria
+
+- Renders correctly on a physical device for the real test user's actual primary indicator and
+  real (currently sparse) data — not a mocked/synthetic dataset.
+- Doesn't crash or render nonsensically with only 1 data point.
+- Visually matches `docs/04` §10.8: no excessive axes/labels, chart isn't the dominant element,
+  latest value is legible.
+
+### Definition of Done
+
+A user's key indicator — chosen deterministically by their category, not arbitrarily — renders as
+a real, simple chart using real backend data, ready for Milestone 32 to place on the actual Home
+Screen.
+
+### Suggested Commit
+
+`feat: add KeyIndicatorChart component`
+
+### Claude Code Tutor Prompt
+
+> Help me build a simple line chart for Walris using react-native-svg. Explain how to handle the
+> case where an indicator only has one data point instead of a real trend line.
 
 ## Milestone 31 — Supporting News Cards
 
@@ -1148,11 +1229,12 @@ Cards linking out to the source Marketaux articles behind that day's personalize
 
 ## Milestone 32 — Home Screen
 
-Assembles Milestones 29-31 into the actual home screen: header, the AI-generated narrative,
-supporting key-indicator chart(s), supporting news cards, loading/empty/error states, and
-pull-to-refresh. Replaces the old "top 5 event list" home screen entirely — there's no per-event
-navigation, since Milestones 35/36 from the original Part 3 (event detail route + content sections)
-no longer apply under this model.
+Assembles Milestones 29 and 31 into the actual home screen: header, the AI-generated narrative,
+supporting news cards, loading/empty/error states, and pull-to-refresh. **No key-indicator chart**
+— Milestone 30 is deferred (see its section above); the underlying `indicators` data is still
+available in the API response for whenever that's revisited. Replaces the old "top 5 event list"
+home screen entirely — there's no per-event navigation, since Milestones 35/36 from the original
+Part 3 (event detail route + content sections) no longer apply under this model.
 
 ## Milestone 33 — Empty, Error, and Loading States
 

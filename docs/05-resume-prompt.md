@@ -188,7 +188,9 @@ bugs review caught in all of these milestones before they shipped.
 - [x] *(not a numbered milestone)* **Backend indicator-data extension** — resolved Milestone 30's
   real blocker; `GET /v1/users/me/briefing` now returns structured `indicators` data, verified
   end-to-end 2026-08-24 — see notes below
-- [ ] Milestones 30–34 — Mobile App (Part 3, remaining)
+- [~] **Milestone 30 — Key Indicator Chart Component** (deferred 2026-08-24, not part of V1 —
+  see notes below)
+- [ ] Milestones 31–34 — Mobile App (Part 3, remaining)
 - [ ] Milestones 35–50 — Notifications, QA, Deployment & Launch (Part 4)
 
 ## Current Milestone
@@ -212,8 +214,12 @@ built the shared `Screen` layout component and migrated every screen onto it. M2
 confirmed live on a physical device 2026-08-21. See the write-ups below for what got built and the
 real bugs review caught in each before they shipped. **The backend indicator-data extension
 (2026-08-24) resolved M30's real blocker** — `GET /v1/users/me/briefing` now returns structured
-`indicators` data, not just prose; see that write-up below. **Next up: Milestone 30 — Key Indicator
-Chart Component** itself (the actual chart-rendering component), not yet started.
+`indicators` data, not just prose; see that write-up below. **Milestone 30 (Key Indicator Chart
+Component) itself is deferred, not part of V1** — decided after scoping it out: most indicators
+only have 1-2 data points right now, so a chart showing the same near-static picture every day a
+user opens the app doesn't earn its place yet. Revisit once real history accumulates. `docs/03`'s
+M32 (Home Screen) no longer assembles a chart. **Next up: Milestone 31 — Supporting News Cards**,
+not yet started.
 
 **Milestone 14's core flow is verified end-to-end on a real device** — sign-up → `/category` →
 `/topics` → `/` all confirmed working against the live database. Two smaller pieces of M14 are
@@ -2336,21 +2342,21 @@ EXPO_PUBLIC_API_BASE_URL
 2026-08-15, updated 2026-08-17 (M22/M23 both closed), updated 2026-08-19, updated 2026-08-20 (M24/M25
 closed), updated 2026-08-20 (`redirectAfterAuth` fix confirmed live), updated 2026-08-20 (M26
 closed), updated 2026-08-21 (M27 confirmed live and closed), updated 2026-08-21 (M28 confirmed live
-and closed), updated 2026-08-21 (M29 confirmed live and closed), updated again 2026-08-24 (backend
-indicator-data extension resolved M30's real blocker) — item 1 below is now about M30 itself, not
-the prerequisite.)*
+and closed), updated 2026-08-21 (M29 confirmed live and closed), updated 2026-08-24 (backend
+indicator-data extension resolved M30's real blocker), updated again 2026-08-24 (M30 itself
+deferred, not part of V1) — item 1 below now points to Milestone 31.)*
 
-1. **PRIORITY when resuming: start Milestone 30 — Key Indicator Chart Component itself.** The data
-   blocker is resolved (see the write-up above) — `GET /v1/users/me/briefing` now returns
-   `indicators: IndicatorSeries[]`, verified end-to-end including on a physical device. What's left
-   is the actual chart-rendering component: a lightweight chart rendering one or more of the
-   relevant FRED indicators, replacing the old event-detail-page chart. This hasn't been expanded
-   into a full roadmap section yet — same pattern as the last several milestones, worth doing that
-   first. (Reminder: the temporary `BriefingDebug` and `TypographyDebug` blocks in `app/index.tsx`
-   are still there deliberately — `BriefingDebug` stays until Milestone 32 builds the real Home
-   Screen; `TypographyDebug` should come out once a real screen applies the typography tokens.
-   `BriefingDebug` was extended to show `indicators` data for the backend-extension verification —
-   worth deciding whether that stays or gets trimmed once M30's real chart component exists.)
+1. **PRIORITY when resuming: start Milestone 31 — Supporting News Cards.** Milestone 30 (Key
+   Indicator Chart Component) is deferred, not part of V1 — decided after scoping it out: most
+   indicators only have 1-2 data points right now (the 400-day retention just started 2026-08-24),
+   so a chart showing a near-static picture every day a user opens the app doesn't earn its place
+   yet. Revisit once real history accumulates — see `docs/03`'s M30 section for the scoping work
+   kept as reference (indicator-selection logic, chart library choice). The underlying `indicators`
+   API data itself is still shipped and useful regardless of the deferral. `docs/03`'s M32 (Home
+   Screen) has been updated to no longer assemble a chart. (Reminder: the temporary `BriefingDebug`
+   and `TypographyDebug` blocks in `app/index.tsx` are still there deliberately — `BriefingDebug`
+   stays until Milestone 32 builds the real Home Screen; `TypographyDebug` should come out once a
+   real screen applies the typography tokens.)
 2. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
 3. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12
