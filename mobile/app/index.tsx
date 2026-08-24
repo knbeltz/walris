@@ -40,6 +40,12 @@ function BriefingDebug() {
       <Text>Briefing date: {data.date}</Text>
       <Text>Headline: {data.content.headline}</Text>
       <Text>Sections: {data.content.sections.length}</Text>
+      <Text>Indicators: {data.indicators.length}</Text>
+      {data.indicators.slice(0, 3).map((indicator) => (
+        <Text key={indicator.item_key}>
+          {indicator.label}: {indicator.points.at(-1)?.value}
+        </Text>
+      ))}
     </View>
   );
 }

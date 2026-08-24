@@ -1,5 +1,16 @@
 import { z } from "zod";
 
+export const IndicatorPointSchema = z.object({
+    date: z.iso.date(),
+    value: z.number(),
+});
+
+export const IndicatorSeriesSchema = z.object({
+    item_key: z.string(),
+    label: z.string(),
+    points: z.array(IndicatorPointSchema),
+});
+
 export const UserBriefingResponseSchema = z.object({
     date: z.iso.date(),
     content: z.object({
@@ -11,8 +22,7 @@ export const UserBriefingResponseSchema = z.object({
             })
         ),
     }),
+    indicators: z.array(IndicatorSeriesSchema),
 });
 
-export type UserBriefingResponse = z.infer<
-    typeof UserBriefingResponseSchema
->;
+export type UserBriefingResponse = z.infer<typeof UserBriefingResponseSchema>;
