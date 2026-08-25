@@ -48,9 +48,6 @@ def get_todays_briefing(
         for n in sorted_news[:5]
     ]
 
-
-
-
     relevant_keys = get_relevant_fred_item_keys(user)
 
     items = db.scalars(

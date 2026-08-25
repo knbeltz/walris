@@ -6,6 +6,7 @@ import { typography } from '@/theme/typography';
 import { Link } from 'expo-router';
 import { Screen } from '@/components/ui/screen';
 import { DailyBriefingHeader } from '@/components/ui/daily-briefing-header';
+import { NewsCard } from '@/components/ui/news-card';
 
 // Temporary — Milestone 27 verification only. Remove once real screens apply these tokens.
 function TypographyDebug() {
@@ -46,6 +47,10 @@ function BriefingDebug() {
           {indicator.label}: {indicator.points.at(-1)?.value}
         </Text>
       ))}
+      <Text>News: {data.news.length}</Text>
+      {data.news.map((newsItem) => (
+        <NewsCard key={newsItem.url} news={newsItem} />
+      ))}
     </View>
   );
 }
@@ -81,7 +86,7 @@ function HealthProfile() {
 
 export default function Home() {
   return (
-    <Screen>
+    <Screen scroll>
       <DailyBriefingHeader />
       <HealthProfile />
       <BriefingDebug />
