@@ -22,17 +22,21 @@ export const NewsItemSchema = z.object({
 
 export type NewsItem = z.infer<typeof NewsItemSchema>;
 
+export const BriefingSectionSchema = z.object({
+  heading: z.string(),
+  body: z.string(),
+});
+
+export const BriefingContentSchema = z.object({
+  headline: z.string(),
+  sections: z.array(BriefingSectionSchema),
+});
+
+export type BriefingContent = z.infer<typeof BriefingContentSchema>;
+
 export const UserBriefingResponseSchema = z.object({
   date: z.iso.date(),
-  content: z.object({
-    headline: z.string(),
-    sections: z.array(
-      z.object({
-        heading: z.string(),
-        body: z.string(),
-      }),
-    ),
-  }),
+  content: BriefingContentSchema,
   indicators: z.array(IndicatorSeriesSchema),
   news: z.array(NewsItemSchema),
 });
