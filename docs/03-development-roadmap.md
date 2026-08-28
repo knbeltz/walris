@@ -1288,12 +1288,79 @@ Home Screen.
 
 ## Milestone 32 — Home Screen
 
-Assembles Milestones 29 and 31 into the actual home screen: header, the AI-generated narrative,
-supporting news cards, loading/empty/error states, and pull-to-refresh. **No key-indicator chart**
-— Milestone 30 is deferred (see its section above); the underlying `indicators` data is still
-available in the API response for whenever that's revisited. Replaces the old "top 5 event list"
-home screen entirely — there's no per-event navigation, since Milestones 35/36 from the original
-Part 3 (event detail route + content sections) no longer apply under this model.
+### Objective
+
+Replace `app/index.tsx`'s M10-M31 verification scaffolding (`HealthProfile`, `BriefingDebug`,
+`TypographyDebug`) with the actual Home Screen: assembles Milestones 29 and 31 into one real
+screen — header, the AI-generated narrative, supporting news cards, working loading/empty/error
+states, and pull-to-refresh. **No key-indicator chart** — Milestone 30 is deferred (see its
+section above); the underlying `indicators` data is still available in the API response for
+whenever that's revisited.
+
+**Scope notes:**
+
+- `docs/04` §20's Home Screen spec ("top 5 events," "notification CTA if not enabled") is stale,
+  pre-pivot text — the roadmap's own description above is what's actually being built; there's no
+  per-event navigation, since Milestones 35/36 from the original Part 3 (event detail route +
+  content sections) no longer apply under this model, and notification permission/registration
+  doesn't exist yet (that's Milestones 35-37, later in the roadmap) so a CTA for it would have
+  nothing to link to.
+- **Real gap found while scoping:** `index.tsx` currently has no signed-in/signed-out branching at
+  all — every visitor, authenticated or not, sees the same `HealthProfile` block (backend status +
+  sign-in/sign-up links) regardless of session state. There's also no route guard anywhere in
+  `app/_layout.tsx` redirecting a signed-out user away from `/`. This means `/` is the *only*
+  reachable entry point for a signed-out user to reach sign-in/sign-up — the real Home Screen this
+  milestone builds needs an `isSignedIn` check (`useAuth()`, already used elsewhere in the app) to
+  decide whether to render the sign-in/sign-up prompt or the real briefing UI, not just delete the
+  auth links outright.
+- **Loading/empty/error states here should stay functional, not polished** — Milestone 33 (next)
+  is explicitly scoped to the real designed versions of these states (`docs/04` §10.9/§10.10) plus
+  a shared retry mechanism. Building throwaway polish now that M33 immediately replaces would be
+  wasted work.
+
+### Deliverables
+
+- `mobile/components/ui/screen.tsx`: extend `Screen` with an optional `refreshControl` prop
+  (`ReactElement`), forwarded to its internal `ScrollView` — the only way React Native supports
+  pull-to-refresh, and `Screen` currently has no way to pass one through.
+- `mobile/components/ui/briefing-narrative.tsx` — a new `BriefingNarrative` component rendering
+  `content.headline` (`headlineMd`/`headlineSm` typography) and each `content.sections[]` entry
+  (heading + body, `bodyMd` for body text) — the actual AI-generated narrative has never been
+  rendered anywhere yet; `BriefingDebug` only ever showed a headline string and a section count.
+- Rewrite `app/index.tsx`'s `Home()`:
+  - `useAuth()`'s `isSignedIn` branches between the sign-in/sign-up prompt and the real screen.
+  - Signed-in: `DailyBriefingHeader`, `BriefingNarrative`, a list of `NewsCard`s from `news`, all
+    inside `Screen scroll` with a `RefreshControl` wired to `useTodayBriefing`'s `refetch`/
+    `isRefetching`.
+  - Basic, functional (not yet `docs/04`-styled) loading/empty/error states — no crash, no
+    infinite spinner, an empty-briefing day reads as "not available yet," not as broken.
+  - Remove `HealthProfile`'s "Backend Connected" debug text, `BriefingDebug`, and
+    `TypographyDebug` entirely — this milestone is what all three were scaffolding toward.
+
+### Acceptance Criteria
+
+- Verified live on a physical device: a signed-in user with a real generated briefing sees the
+  real headline, section text, and news cards; a signed-in user with no briefing yet sees a
+  reasonable empty state, not a crash; a signed-out user sees the sign-in/sign-up prompt, not the
+  briefing UI.
+- Pull-to-refresh actually triggers a real refetch and updates the screen when new data differs.
+- No leftover references to `useHealthCheck`, `BriefingDebug`, or `TypographyDebug` anywhere in
+  `app/index.tsx`.
+
+### Definition of Done
+
+Opening the app as a signed-in user with a category selected shows their actual personalized daily
+briefing — the real thing this entire project has been building toward — not a debug scaffold.
+
+### Suggested Commit
+
+`feat: build real Home Screen from M29/M31 components`
+
+### Claude Code Tutor Prompt
+
+> Help me assemble Walris's real Home Screen from the header, narrative, and news card
+> components we've already built. Explain how pull-to-refresh works with TanStack Query's
+> `refetch` and why `Screen` needs a new prop to support it.
 
 ## Milestone 33 — Empty, Error, and Loading States
 

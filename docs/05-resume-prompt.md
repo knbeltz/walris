@@ -1,19 +1,38 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-08-24 (Milestone 31 — Supporting News Cards — is complete. `GET
-/v1/users/me/briefing` now returns `news: NewsItem[]` — up to 5 real, deduplicated,
-most-recently-published Marketaux articles relevant to the user, closing the same
-data-availability gap M25 flagged for news (`DailyDataNews` existed in the database, linked to
-`DailyDataItem`, but was never exposed through any endpoint). `mobile/schemas/briefings.ts`'s
-`NewsItemSchema` and `mobile/components/ui/news-card.tsx`'s `NewsCard` (headline, summary, source,
-a clean formatted timestamp via `Intl.DateTimeFormat`, tap-to-open via `Linking.openURL`) are both
-built. Sentiment display was deliberately dropped from the card — a real product call, not a bug:
-Marketaux only provides a raw numeric score, not a friendly label, and deemed not worth it for V1;
-deferred to a later version. Confirmed live on a physical device against real data (temporarily
-pointing the query at 2026-08-17, a date with actual fetched articles, then reverted): 5 real cards
-rendered correctly, and tapping one actually opened its real article URL. Milestone 30 (Key
-Indicator Chart) was deferred 2026-08-24, not part of V1 — see that section below.)
+**Last Updated:** 2026-08-24 (Milestone 32 — Home Screen — is in progress, not yet complete.
+`Screen` extended with an optional `refreshControl` prop; `BriefingSectionSchema`/
+`BriefingContentSchema`/`BriefingContent` added to `mobile/schemas/briefings.ts` (the narrative's
+shape was only ever inline before, unlike every other schema); `mobile/components/ui/
+briefing-narrative.tsx`'s `BriefingNarrative` renders the real AI-generated headline/sections for
+the first time (previously only a headline string and section count were ever shown).
+`app/index.tsx` rewritten: `HealthProfile`/`BriefingDebug`/`TypographyDebug` (the M10-M31
+verification scaffolding) are gone, replaced by `SignInPrompt` (signed-out) and `TodayBriefing`
+(signed-in), gated on `useAuth()`'s `isLoaded`/`isSignedIn`, with pull-to-refresh wired via
+`RefreshControl`. **Still outstanding:** sign-out (a real, newly-discovered gap — no `signOut()`
+call exists anywhere in the app yet; not part of M32's original scope but surfaced while working on
+it, deferred rather than blocking this milestone), and a clean on-device re-verification of the
+final rewritten screen — testing was repeatedly interrupted by network instability and a real
+`redirectAfterAuth` bug (see below), not yet confirmed clean end-to-end since the rename.
+
+**`redirectAfterAuth`'s race condition reopened — worth knowing this wasn't actually fully fixed
+back in M24.** It recurred live today under this session's exceptionally unstable network (multiple
+hotspot switches, repeated backend restarts). Two real things came out of it: (1) the retry budget
+was bumped from 3 attempts/200ms (~600ms) to 5/400ms (~2s) — a mitigation, not a fix; (2) a genuine
+bug was found and fixed: the `catch` block redirected to `/category` on *any* failure, not just a
+confirmed `category === null` — meaning a transient failure (this race, a network blip) made an
+already-onboarded user's profile *look* wiped, sending them back through onboarding, even though
+their real database row was completely untouched (confirmed directly against the DB). Fixed to only
+redirect to `/category` on a confirmed null; any other failure now falls back to `/`, which has a
+real error/loading state thanks to M32's `TodayBriefing`. **The actual root cause — `redirectAfterAuth`
+still gets called twice on sign-up/sign-in (the explicit `navigate` callback plus a racing
+`useEffect`) — is diagnosed but deliberately deferred to tomorrow, 2026-08-25**: the fix is a
+`useRef` guard so the `useEffect` skips its own call when the explicit, correctly-timed call has
+already handled it, needed in both `sign-in.tsx` and `sign-up.tsx`. See Known Issues.
+
+Milestone 31 (Supporting News Cards) and Milestone 30's deferral both closed out earlier the same
+day; see their write-ups below.)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -185,7 +204,9 @@ bugs review caught in all of these milestones before they shipped.
   see notes below)
 - [x] **Milestone 31 — Supporting News Cards** (`NewsCard` built and verified live on a physical
   device, including real tap-to-open — see notes below)
-- [ ] Milestones 32–34 — Mobile App (Part 3, remaining)
+- [~] **Milestone 32 — Home Screen** (in progress — real screen assembled, debug scaffolding
+  removed; sign-out and full on-device re-verification still outstanding — see notes below)
+- [ ] Milestones 33–34 — Mobile App (Part 3, remaining)
 - [ ] Milestones 35–50 — Notifications, QA, Deployment & Launch (Part 4)
 
 ## Current Milestone
@@ -215,13 +236,57 @@ only have 1-2 data points right now, so a chart showing the same near-static pic
 user opens the app doesn't earn its place yet. Revisit once real history accumulates. `docs/03`'s
 M32 (Home Screen) no longer assembles a chart. **Milestone 31 (Supporting News Cards) is
 complete** — `NewsCard` renders real, deduplicated, recent articles, confirmed live on a physical
-device including real tap-to-open behavior. See that write-up below.
+device including real tap-to-open behavior. **Milestone 32 (Home Screen) is in progress** — the
+real screen is assembled (`BriefingNarrative`, `NewsCard`s, signed-in/out branching, pull-to-refresh,
+all debug scaffolding removed), but sign-out (newly discovered gap, not original M32 scope) and a
+clean on-device re-verification are still outstanding, interrupted by a reopened `redirectAfterAuth`
+bug — see its write-up and Known Issues below.
 
 **Milestone 14's core flow is verified end-to-end on a real device** — sign-up → `/category` →
 `/topics` → `/` all confirmed working against the live database. Two smaller pieces of M14 are
 still outstanding (name field, settings screen — see M14 notes below), but the flow itself is no
 longer blocked. The personalization pivot is fully planned in
 `docs/08-personalization-pivot-plan.md`.
+
+### Milestone 32 — Home Screen (in progress, started 2026-08-24)
+
+Per `docs/03`'s M32 scope: replace `app/index.tsx`'s M10-M31 verification scaffolding with the
+actual Home Screen.
+
+**What got built:**
+
+- `mobile/components/ui/screen.tsx`: `Screen` extended with an optional `refreshControl` prop
+  (`ReactElement<RefreshControlProps>`), forwarded to its internal `ScrollView` — the only way
+  React Native supports pull-to-refresh, and `Screen` had no way to pass one through before.
+- `mobile/schemas/briefings.ts`: `BriefingSectionSchema`/`BriefingContentSchema` pulled out as
+  their own named schemas (mirroring the backend's `BriefingSection`/`BriefingContent` Pydantic
+  classes) — the narrative's shape used to be the only one left anonymous/inline, unlike
+  `IndicatorSeriesSchema`/`NewsItemSchema`. `export type BriefingContent` added for component props.
+- `mobile/components/ui/briefing-narrative.tsx`: `BriefingNarrative` — renders the real headline
+  (`headlineMd`) and each section (`headlineSm` + `bodyMd`) for the first time; previously only a
+  headline string and a section count were ever shown anywhere.
+- `app/index.tsx` fully rewritten: `HealthProfile`/`BriefingDebug`/`TypographyDebug` removed
+  entirely (confirmed via grep — no leftover references to `useHealthCheck`, `BriefingDebug`, or
+  `TypographyDebug`). Replaced with `SignInPrompt` (renders when `isLoaded && !isSignedIn`) and
+  `TodayBriefing` (renders when `isLoaded && isSignedIn`), using `useAuth()` — fixing a real gap
+  found while scoping this milestone: previously *every* visitor, signed in or not, saw the same
+  block including sign-in/sign-up links, with no auth branching anywhere. Pull-to-refresh wired via
+  `RefreshControl`, tied to `useTodayBriefing`'s `refetch`/`isRefetching`.
+
+**Newly discovered gap, deliberately deferred, not part of M32's original scope:** there is no
+sign-out mechanism anywhere in the app — confirmed via grep, zero `signOut()` calls exist. Not
+blocking this milestone, but a real hole: once signed in, a user currently has no way to sign out.
+Clerk's `useAuth()` (already used on this screen) exposes `signOut()` directly, no new dependency
+needed — a minimal control could live directly on the Home Screen until a real settings screen
+exists (still the open M14 loose end).
+
+**Still outstanding:**
+
+- The sign-out gap above.
+- A clean on-device re-verification of the final rewritten screen (signed-in real briefing, and
+  specifically the signed-out `SignInPrompt` path) — testing was repeatedly interrupted by network
+  instability and the `redirectAfterAuth` bug below, so neither has been cleanly reconfirmed since
+  the rewrite.
 
 ### Milestone 31 — Supporting News Cards (complete, 2026-08-24)
 
@@ -615,7 +680,9 @@ threw a false "session could not be verified" because `isSignedIn` can flip `tru
 `getToken()` is actually able to return a token. Fixed with a bounded retry (3 attempts, 200ms
 between them) rather than removing the `useEffect`, since that effect is also the only thing that
 redirects an already-signed-in user who lands back on `/sign-in`/`/sign-up`. Confirmed resolved on
-a physical device 2026-08-20 — see Known Issues.
+a physical device 2026-08-20 — **later found incomplete: the race recurred 2026-08-24 under worse
+network conditions; see the current Known Issues entry for the full history and the actual
+root-cause fix deferred to 2026-08-25.**
 
 ### Milestone 23 — Scheduled Personalization Job (complete for current scope, 2026-08-16–17)
 
@@ -2310,15 +2377,30 @@ walris/
 - **`backend/app/schemas/economic_event.py` (`EconomicEvent`) is unused dead weight** from the
   abandoned Finnhub/calendar scope — not yet deleted; decide when the `fmp_service.py` rewrite
   happens.
-- **Resolved (2026-08-20):** `redirectAfterAuth` used to get called twice on sign-up (once
-  explicitly inside `signUp.finalize()`'s `navigate` callback, once via a `useEffect` watching
-  `isSignedIn`), and the duplicate could lose a timing race against Clerk's session activation —
-  `isSignedIn` can flip `true` slightly before `getToken()` is actually able to return a token,
-  so the `useEffect`'s copy would throw "Your session could not be verified." Found 2026-08-19
-  during M24 device verification. Fixed by retrying `getToken()` up to 3 times with a 200ms delay
-  between attempts before giving up, rather than removing the `useEffect` (still needed — it's the
-  only thing that redirects an already-signed-in user who lands back on `/sign-in`/`/sign-up`).
-  Confirmed live on a physical device 2026-08-20: the error no longer appears.
+- **Reopened (2026-08-24) — not actually fully fixed on 2026-08-20 as previously recorded.**
+  `redirectAfterAuth` gets called twice on sign-up/sign-in (once explicitly inside
+  `signUp.finalize()`/`setActive()`'s `navigate` callback, once via a `useEffect` watching
+  `isSignedIn` in both `sign-in.tsx` and `sign-up.tsx`), and the duplicate can lose a timing race
+  against Clerk's session activation — `isSignedIn` can flip `true` slightly before `getToken()` is
+  actually able to return a token, so the `useEffect`'s copy throws "Your session could not be
+  verified." Originally found 2026-08-19 during M24 device verification; the 2026-08-20 fix
+  (retrying `getToken()` up to 3 times/200ms) reduced how often this happened but didn't eliminate
+  the race — it recurred live 2026-08-24 under this session's exceptionally unstable network
+  (multiple hotspot switches, repeated backend restarts). Retry budget bumped to 5 attempts/400ms
+  (~2s) the same day — still a mitigation, not a fix, since no finite retry budget is guaranteed
+  under bad enough network conditions. A **separate, real bug** was also found and fixed the same
+  day: the `catch` block redirected to `/category` on *any* failure, not just a confirmed
+  `category === null` — meaning this race (or any transient failure) made an already-onboarded
+  user's profile look wiped, sending them back through onboarding, even though their real database
+  row was completely untouched (confirmed directly against the DB). Now only a confirmed null
+  redirects to `/category`; any other failure falls back to `/` instead, which has a real
+  error/loading state thanks to M32's `TodayBriefing`. **The actual root cause is diagnosed but
+  deliberately deferred to 2026-08-25**: stop the `useEffect` from redundantly re-running the check
+  when the explicit, correctly-timed `navigate`-callback call already handled it (a `useRef` guard
+  set by the explicit call site, checked by the effect) — needed in both `sign-in.tsx` and
+  `sign-up.tsx`. The `useEffect` still needs to exist for one legitimate case (an already-signed-in
+  user landing back on `/sign-in`/`/sign-up` with no explicit handler running), so it can't just be
+  deleted.
 
 ## Commands
 
@@ -2407,21 +2489,24 @@ EXPO_PUBLIC_API_BASE_URL
 
 *(Rewritten 2026-08-09, updated 2026-08-10, updated 2026-08-11 (twice), updated 2026-08-14, updated
 2026-08-15, updated 2026-08-17 (M22/M23 both closed), updated 2026-08-19, updated 2026-08-20 (M24/M25
-closed), updated 2026-08-20 (`redirectAfterAuth` fix confirmed live), updated 2026-08-20 (M26
-closed), updated 2026-08-21 (M27 confirmed live and closed), updated 2026-08-21 (M28 confirmed live
-and closed), updated 2026-08-21 (M29 confirmed live and closed), updated 2026-08-24 (backend
-indicator-data extension resolved M30's real blocker), updated 2026-08-24 (M30 itself deferred, not
-part of V1), updated 2026-08-24 (M31 backend done, mobile side started), updated again 2026-08-24
-(M31 confirmed live and closed) — item 1 below now points to Milestone 32.)*
+closed), updated 2026-08-20 (`redirectAfterAuth` fix confirmed live — later found incomplete),
+updated 2026-08-20 (M26 closed), updated 2026-08-21 (M27 confirmed live and closed), updated
+2026-08-21 (M28 confirmed live and closed), updated 2026-08-21 (M29 confirmed live and closed),
+updated 2026-08-24 (backend indicator-data extension resolved M30's real blocker), updated
+2026-08-24 (M30 itself deferred, not part of V1), updated 2026-08-24 (M31 backend done, mobile side
+started), updated 2026-08-24 (M31 confirmed live and closed), updated again 2026-08-24 (M32 in
+progress, `redirectAfterAuth` reopened, root-cause fix deferred to 2026-08-25) — item 1 below now
+covers tomorrow's priority.)*
 
-1. **PRIORITY when resuming: start Milestone 32 — Home Screen.** Assembles Milestones 29 and 31
-   into the actual home screen: `DailyBriefingHeader`, the AI-generated narrative (`content.headline`
-   + `content.sections` — currently only a headline string and section count are shown in
-   `BriefingDebug`, the actual section text has never been rendered), and `NewsCard`s for `news`,
-   plus loading/empty/error states and pull-to-refresh. No key-indicator chart — Milestone 30 is
-   deferred, not part of V1 (see `docs/03`'s M30 section for why and for the scoping work kept as
-   reference). This is also the milestone where the temporary `BriefingDebug` and `TypographyDebug`
-   blocks in `app/index.tsx` finally get replaced by the real thing.
+1. **PRIORITY when resuming (2026-08-25): fix `redirectAfterAuth`'s actual root cause.** Add a
+   `useRef` guard in both `sign-in.tsx` and `sign-up.tsx` so the `useEffect` watching `isSignedIn`
+   skips its own call to `redirectAfterAuth` when the explicit, correctly-timed `navigate`-callback
+   call has already handled it this mount — see the Known Issues write-up for the exact shape.
+   Don't just delete the `useEffect`; it's still needed for a user landing back on `/sign-in`/
+   `/sign-up` while already signed in. Once that's in, finish Milestone 32: add a sign-out control
+   (Clerk's `useAuth().signOut()`, no new dependency needed — a real, newly-discovered gap, not
+   part of M32's original scope) and do a clean on-device pass confirming both the signed-in
+   (`TodayBriefing`) and signed-out (`SignInPrompt`) paths render correctly, plus pull-to-refresh.
 2. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
 3. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12
