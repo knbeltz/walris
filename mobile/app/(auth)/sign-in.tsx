@@ -1,12 +1,12 @@
-import { useSignIn, useSSO, useAuth  } from '@clerk/expo';
-import { useState, useEffect } from 'react';
+import { useSignIn, useSSO, useAuth } from '@clerk/expo';
+import { useState, useEffect, useRef } from 'react';
 import { TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as AuthSession from 'expo-auth-session';
 
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
-import { redirectAfterAuth } from '@/lib/redirectAfterAuth'
+import { redirectAfterAuth } from '@/lib/redirectAfterAuth';
 import { getErrorMessage } from '@/lib/utils';
 
 export default function SignInScreen() {
@@ -18,8 +18,10 @@ export default function SignInScreen() {
 
   const router = useRouter();
 
+  const hasRedirected = useRef(false);
+
   useEffect(() => {
-    if (isSignedIn) {
+    if (isSignedIn && !hasRedirected.current) {
       void redirectAfterAuth(getToken, router);
     }
   }, [isSignedIn, getToken, router]);
@@ -29,8 +31,8 @@ export default function SignInScreen() {
   });
 
   // Email authentication state
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   // General UI state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -44,7 +46,7 @@ export default function SignInScreen() {
       setErrorMessage('Please enter your email address.');
       return;
     }
-    
+
     if (!password) {
       setErrorMessage('Please enter your password.');
       return;
@@ -55,7 +57,8 @@ export default function SignInScreen() {
 
     try {
       const { error } = await signIn.password({
-        emailAddress: normalizedEmail, password
+        emailAddress: normalizedEmail,
+        password,
       });
 
       if (error) {
@@ -68,6 +71,8 @@ export default function SignInScreen() {
         return;
       }
 
+      hasRedirected.current = true;
+
       await signIn.finalize({
         navigate: async ({ session }) => {
           if (session?.currentTask) {
@@ -78,7 +83,11 @@ export default function SignInScreen() {
             return;
           }
 
-          await redirectAfterAuth(getToken, router)
+          if (!session) {
+            throw new Error('No Clerk Session after sign-in');
+          }
+
+          await redirectAfterAuth(() => session.getToken(), router);
         },
       });
     } catch (error: unknown) {
@@ -100,9 +109,7 @@ export default function SignInScreen() {
       });
 
       if (!createdSessionId) {
-        setErrorMessage(
-          'Google authentication requires an additional step.',
-        );
+        setErrorMessage('Google authentication requires an additional step.');
         return;
       }
 
@@ -110,6 +117,8 @@ export default function SignInScreen() {
         setErrorMessage('Unable to activate the Google session.');
         return;
       }
+
+      hasRedirected.current = true;
 
       await setActive({
         session: createdSessionId,
@@ -122,7 +131,11 @@ export default function SignInScreen() {
             return;
           }
 
-          await redirectAfterAuth(getToken, router);
+          if (!session) {
+            throw new Error('No Clerk session after sign-in');
+          }
+
+          await redirectAfterAuth(() => session.getToken(), router);
         },
       });
     } catch (error: unknown) {
@@ -148,11 +161,27 @@ export default function SignInScreen() {
         return;
       }
 
+      hasRedirected.current = true;
+
       await setActive({
         session: createdSessionId,
-      });
 
-      await redirectAfterAuth(getToken, router);
+        navigate: async ({ session }) => {
+          if (session?.currentTask) {
+            console.log(
+              'Clerk session task still required:',
+              session.currentTask,
+            );
+            return;
+          }
+
+          if (!session) {
+            throw new Error('No Clerk session after Apple sign-in.');
+          }
+
+          await redirectAfterAuth(() => session.getToken(), router);
+        },
+      });
     } catch (error: unknown) {
       console.error('Apple SSO error:', error);
       setErrorMessage(getErrorMessage(error));
@@ -194,7 +223,10 @@ export default function SignInScreen() {
         <Text>{errors.fields.password.message}</Text>
       ) : null}
 
-      <Button onPress={handleEmailPasswordSignIn} disabled={authenticationIsLoading}>
+      <Button
+        onPress={handleEmailPasswordSignIn}
+        disabled={authenticationIsLoading}
+      >
         <Text>{authenticationIsLoading ? 'Signing in...' : 'Sign in'}</Text>
       </Button>
 
