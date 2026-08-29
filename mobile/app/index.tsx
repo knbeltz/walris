@@ -1,5 +1,5 @@
 import { Text } from '@/components/ui/text';
-import { RefreshControl, View } from 'react-native';
+import { Pressable, RefreshControl, View } from 'react-native';
 import { useTodayBriefing } from '@/hooks/useTodayBriefing';
 import { Link } from 'expo-router';
 import { Screen } from '@/components/ui/screen';
@@ -7,8 +7,6 @@ import { DailyBriefingHeader } from '@/components/ui/daily-briefing-header';
 import { NewsCard } from '@/components/ui/news-card';
 import { BriefingNarrative } from '@/components/ui/briefing-narrative';
 import { useAuth } from '@clerk/expo';
-import { Pressable } from 'react-native';
-
 
 function SignInPrompt() {
   return (
@@ -27,11 +25,11 @@ function SignInPrompt() {
 function SignOut() {
   const { signOut } = useAuth();
 
-  return(
+  return (
     <Pressable onPress={() => signOut()}>
       <Text>Sign Out</Text>
     </Pressable>
-  )
+  );
 }
 
 function TodayBriefing() {
