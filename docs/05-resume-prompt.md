@@ -1,21 +1,20 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-08-25 (`redirectAfterAuth`'s race condition is genuinely resolved now — the
-2026-08-20 fix was incomplete, but today's fix addresses the actual root cause, confirmed live
-across all three auth methods (password, Google, Apple) in both `sign-in.tsx` and `sign-up.tsx`.
-Full history in Known Issues. Milestone 32 — Home Screen — is still in progress: `Screen` extended
-with an optional `refreshControl` prop; `BriefingSectionSchema`/`BriefingContentSchema`/
-`BriefingContent` added to `mobile/schemas/briefings.ts` (the narrative's shape was only ever
-inline before, unlike every other schema); `mobile/components/ui/briefing-narrative.tsx`'s
-`BriefingNarrative` renders the real AI-generated headline/sections for the first time.
-`app/index.tsx` rewritten: `HealthProfile`/`BriefingDebug`/`TypographyDebug` (the M10-M31
-verification scaffolding) are gone, replaced by `SignInPrompt` (signed-out) and `TodayBriefing`
-(signed-in), gated on `useAuth()`'s `isLoaded`/`isSignedIn`, with pull-to-refresh wired via
-`RefreshControl`. **Still outstanding for M32:** sign-out (a real, newly-discovered gap — no
-`signOut()` call exists anywhere in the app yet; not part of M32's original scope, deferred rather
-than blocking this milestone), and a clean on-device re-verification of the final rewritten screen
-— now that `redirectAfterAuth` is actually fixed, this should no longer be interrupted by it.
+**Last Updated:** 2026-08-25 (Milestone 32 — Home Screen — is complete. `redirectAfterAuth`'s race
+condition is genuinely resolved (the 2026-08-20 fix was incomplete; today's fix addresses the
+actual root cause, confirmed live across all three auth methods — password, Google, Apple — in
+both `sign-in.tsx` and `sign-up.tsx`; full history in Known Issues), which had been blocking a
+clean device pass. `Screen` extended with an optional `refreshControl` prop;
+`BriefingSectionSchema`/`BriefingContentSchema`/`BriefingContent` added to
+`mobile/schemas/briefings.ts`; `mobile/components/ui/briefing-narrative.tsx`'s `BriefingNarrative`
+renders the real AI-generated headline/sections for the first time. `app/index.tsx` rewritten:
+`HealthProfile`/`BriefingDebug`/`TypographyDebug` (the M10-M31 verification scaffolding) replaced
+by `SignInPrompt` (signed-out), `TodayBriefing` (signed-in), and a `SignOut` control (a real,
+newly-discovered gap — no `signOut()` call existed anywhere in the app before this — not part of
+M32's original scope, added anyway rather than left blocking). Confirmed live on a physical
+device: signed-in real briefing content, signed-out sign-in/sign-up prompt, pull-to-refresh, and
+sign-out all verified working.
 
 Milestone 31 (Supporting News Cards) and Milestone 30's deferral both closed out 2026-08-24; see
 their write-ups below.)
@@ -190,8 +189,8 @@ bugs review caught in all of these milestones before they shipped.
   see notes below)
 - [x] **Milestone 31 — Supporting News Cards** (`NewsCard` built and verified live on a physical
   device, including real tap-to-open — see notes below)
-- [~] **Milestone 32 — Home Screen** (in progress — real screen assembled, debug scaffolding
-  removed; sign-out and full on-device re-verification still outstanding — see notes below)
+- [x] **Milestone 32 — Home Screen** (real screen assembled, debug scaffolding removed, sign-out
+  added, verified live on a physical device across every path — see notes below)
 - [ ] Milestones 33–34 — Mobile App (Part 3, remaining)
 - [ ] Milestones 35–50 — Notifications, QA, Deployment & Launch (Part 4)
 
@@ -222,11 +221,10 @@ only have 1-2 data points right now, so a chart showing the same near-static pic
 user opens the app doesn't earn its place yet. Revisit once real history accumulates. `docs/03`'s
 M32 (Home Screen) no longer assembles a chart. **Milestone 31 (Supporting News Cards) is
 complete** — `NewsCard` renders real, deduplicated, recent articles, confirmed live on a physical
-device including real tap-to-open behavior. **Milestone 32 (Home Screen) is in progress** — the
+device including real tap-to-open behavior. **Milestone 32 (Home Screen) is also complete** — the
 real screen is assembled (`BriefingNarrative`, `NewsCard`s, signed-in/out branching, pull-to-refresh,
-all debug scaffolding removed), but sign-out (newly discovered gap, not original M32 scope) and a
-clean on-device re-verification are still outstanding, interrupted by a reopened `redirectAfterAuth`
-bug — see its write-up and Known Issues below.
+sign-out, all debug scaffolding removed) and confirmed live on a physical device across every path.
+See its write-up and Known Issues (for `redirectAfterAuth`'s resolved race) below.
 
 **Milestone 14's core flow is verified end-to-end on a real device** — sign-up → `/category` →
 `/topics` → `/` all confirmed working against the live database. Two smaller pieces of M14 are
@@ -234,7 +232,7 @@ still outstanding (name field, settings screen — see M14 notes below), but the
 longer blocked. The personalization pivot is fully planned in
 `docs/08-personalization-pivot-plan.md`.
 
-### Milestone 32 — Home Screen (in progress, started 2026-08-24)
+### Milestone 32 — Home Screen (complete, 2026-08-24–25)
 
 Per `docs/03`'s M32 scope: replace `app/index.tsx`'s M10-M31 verification scaffolding with the
 actual Home Screen.
@@ -259,20 +257,20 @@ actual Home Screen.
   block including sign-in/sign-up links, with no auth branching anywhere. Pull-to-refresh wired via
   `RefreshControl`, tied to `useTodayBriefing`'s `refetch`/`isRefetching`.
 
-**Newly discovered gap, deliberately deferred, not part of M32's original scope:** there is no
-sign-out mechanism anywhere in the app — confirmed via grep, zero `signOut()` calls exist. Not
-blocking this milestone, but a real hole: once signed in, a user currently has no way to sign out.
-Clerk's `useAuth()` (already used on this screen) exposes `signOut()` directly, no new dependency
-needed — a minimal control could live directly on the Home Screen until a real settings screen
-exists (still the open M14 loose end).
+**Newly discovered gap, not part of M32's original scope, added anyway:** there was no sign-out
+mechanism anywhere in the app — confirmed via grep, zero `signOut()` calls existed. A real hole:
+once signed in, a user had no way to sign out at all. Added `SignOut` (`mobile/app/index.tsx`),
+using Clerk's `useAuth().signOut()` directly — no new dependency needed — rendered alongside
+`TodayBriefing` when `isLoaded && isSignedIn`, until a real settings screen exists (still the open
+M14 loose end) to move it to. One cleanup caught during review: `Pressable` was imported from
+`react-native` on its own separate line instead of being added to the existing `RefreshControl,
+View` import — consolidated.
 
-**Still outstanding:**
-
-- The sign-out gap above.
-- A clean on-device re-verification of the final rewritten screen (signed-in real briefing, and
-  specifically the signed-out `SignInPrompt` path) — testing was repeatedly interrupted by network
-  instability and the `redirectAfterAuth` bug below, so neither has been cleanly reconfirmed since
-  the rewrite.
+**Verification:** on-device re-verification was initially blocked by `redirectAfterAuth`'s
+race condition recurring (see Known Issues for the full story) — once that was actually fixed
+2026-08-25, a clean pass confirmed every path: signed-in real briefing content
+(`BriefingNarrative` + `NewsCard`s), the signed-out `SignInPrompt`, pull-to-refresh actually
+triggering a refetch, and sign-out actually signing the user out.
 
 ### Milestone 31 — Supporting News Cards (complete, 2026-08-24)
 
@@ -2487,14 +2485,16 @@ updated 2026-08-20 (M26 closed), updated 2026-08-21 (M27 confirmed live and clos
 updated 2026-08-24 (backend indicator-data extension resolved M30's real blocker), updated
 2026-08-24 (M30 itself deferred, not part of V1), updated 2026-08-24 (M31 backend done, mobile side
 started), updated 2026-08-24 (M31 confirmed live and closed), updated 2026-08-24 (M32 in progress,
-`redirectAfterAuth` reopened), updated again 2026-08-25 (`redirectAfterAuth` genuinely fixed and
-confirmed live this time) — item 1 below now covers finishing M32.)*
+`redirectAfterAuth` reopened), updated 2026-08-25 (`redirectAfterAuth` genuinely fixed and confirmed
+live), updated again 2026-08-25 (M32 confirmed live and closed) — item 1 below now points to
+Milestone 33.)*
 
-1. **PRIORITY when resuming: finish Milestone 32.** `redirectAfterAuth`'s race is resolved (see
-   Known Issues) and no longer something to work around while testing. What's left: add a sign-out
-   control (Clerk's `useAuth().signOut()`, no new dependency needed — a real, newly-discovered gap,
-   not part of M32's original scope) and do a clean on-device pass confirming both the signed-in
-   (`TodayBriefing`) and signed-out (`SignInPrompt`) paths render correctly, plus pull-to-refresh.
+1. **PRIORITY when resuming: start Milestone 33 — Empty, Error, and Loading States.** Per
+   `docs/03`, this is where the currently-basic loading/error states in `TodayBriefing` get their
+   real designed treatment (`docs/04` §10.9/§10.10 — calm/non-alarming empty state, clear/honest/
+   recoverable error state with a retry action), plus a consistent, reusable way to retry a failed
+   request rather than each screen inventing its own. Deliberately deferred from M32 to avoid
+   polishing something that milestone was always going to hand off.
 2. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
 3. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12
