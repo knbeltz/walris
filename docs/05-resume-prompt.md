@@ -1,38 +1,24 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-08-24 (Milestone 32 — Home Screen — is in progress, not yet complete.
-`Screen` extended with an optional `refreshControl` prop; `BriefingSectionSchema`/
-`BriefingContentSchema`/`BriefingContent` added to `mobile/schemas/briefings.ts` (the narrative's
-shape was only ever inline before, unlike every other schema); `mobile/components/ui/
-briefing-narrative.tsx`'s `BriefingNarrative` renders the real AI-generated headline/sections for
-the first time (previously only a headline string and section count were ever shown).
+**Last Updated:** 2026-08-25 (`redirectAfterAuth`'s race condition is genuinely resolved now — the
+2026-08-20 fix was incomplete, but today's fix addresses the actual root cause, confirmed live
+across all three auth methods (password, Google, Apple) in both `sign-in.tsx` and `sign-up.tsx`.
+Full history in Known Issues. Milestone 32 — Home Screen — is still in progress: `Screen` extended
+with an optional `refreshControl` prop; `BriefingSectionSchema`/`BriefingContentSchema`/
+`BriefingContent` added to `mobile/schemas/briefings.ts` (the narrative's shape was only ever
+inline before, unlike every other schema); `mobile/components/ui/briefing-narrative.tsx`'s
+`BriefingNarrative` renders the real AI-generated headline/sections for the first time.
 `app/index.tsx` rewritten: `HealthProfile`/`BriefingDebug`/`TypographyDebug` (the M10-M31
 verification scaffolding) are gone, replaced by `SignInPrompt` (signed-out) and `TodayBriefing`
 (signed-in), gated on `useAuth()`'s `isLoaded`/`isSignedIn`, with pull-to-refresh wired via
-`RefreshControl`. **Still outstanding:** sign-out (a real, newly-discovered gap — no `signOut()`
-call exists anywhere in the app yet; not part of M32's original scope but surfaced while working on
-it, deferred rather than blocking this milestone), and a clean on-device re-verification of the
-final rewritten screen — testing was repeatedly interrupted by network instability and a real
-`redirectAfterAuth` bug (see below), not yet confirmed clean end-to-end since the rename.
+`RefreshControl`. **Still outstanding for M32:** sign-out (a real, newly-discovered gap — no
+`signOut()` call exists anywhere in the app yet; not part of M32's original scope, deferred rather
+than blocking this milestone), and a clean on-device re-verification of the final rewritten screen
+— now that `redirectAfterAuth` is actually fixed, this should no longer be interrupted by it.
 
-**`redirectAfterAuth`'s race condition reopened — worth knowing this wasn't actually fully fixed
-back in M24.** It recurred live today under this session's exceptionally unstable network (multiple
-hotspot switches, repeated backend restarts). Two real things came out of it: (1) the retry budget
-was bumped from 3 attempts/200ms (~600ms) to 5/400ms (~2s) — a mitigation, not a fix; (2) a genuine
-bug was found and fixed: the `catch` block redirected to `/category` on *any* failure, not just a
-confirmed `category === null` — meaning a transient failure (this race, a network blip) made an
-already-onboarded user's profile *look* wiped, sending them back through onboarding, even though
-their real database row was completely untouched (confirmed directly against the DB). Fixed to only
-redirect to `/category` on a confirmed null; any other failure now falls back to `/`, which has a
-real error/loading state thanks to M32's `TodayBriefing`. **The actual root cause — `redirectAfterAuth`
-still gets called twice on sign-up/sign-in (the explicit `navigate` callback plus a racing
-`useEffect`) — is diagnosed but deliberately deferred to tomorrow, 2026-08-25**: the fix is a
-`useRef` guard so the `useEffect` skips its own call when the explicit, correctly-timed call has
-already handled it, needed in both `sign-in.tsx` and `sign-up.tsx`. See Known Issues.
-
-Milestone 31 (Supporting News Cards) and Milestone 30's deferral both closed out earlier the same
-day; see their write-ups below.)
+Milestone 31 (Supporting News Cards) and Milestone 30's deferral both closed out 2026-08-24; see
+their write-ups below.)
 **Status:** Living Document — update at the end of every milestone
 
 This document is the current state of the Walris project. Read it before making assumptions in a
@@ -2377,30 +2363,36 @@ walris/
 - **`backend/app/schemas/economic_event.py` (`EconomicEvent`) is unused dead weight** from the
   abandoned Finnhub/calendar scope — not yet deleted; decide when the `fmp_service.py` rewrite
   happens.
-- **Reopened (2026-08-24) — not actually fully fixed on 2026-08-20 as previously recorded.**
-  `redirectAfterAuth` gets called twice on sign-up/sign-in (once explicitly inside
+- **Resolved for real (2026-08-25)** — the 2026-08-20 fix was incomplete (see history below); this
+  time it's the actual root cause, confirmed live across all three auth methods.
+  `redirectAfterAuth` used to get called twice on sign-up/sign-in (once explicitly inside
   `signUp.finalize()`/`setActive()`'s `navigate` callback, once via a `useEffect` watching
-  `isSignedIn` in both `sign-in.tsx` and `sign-up.tsx`), and the duplicate can lose a timing race
-  against Clerk's session activation — `isSignedIn` can flip `true` slightly before `getToken()` is
-  actually able to return a token, so the `useEffect`'s copy throws "Your session could not be
-  verified." Originally found 2026-08-19 during M24 device verification; the 2026-08-20 fix
-  (retrying `getToken()` up to 3 times/200ms) reduced how often this happened but didn't eliminate
-  the race — it recurred live 2026-08-24 under this session's exceptionally unstable network
-  (multiple hotspot switches, repeated backend restarts). Retry budget bumped to 5 attempts/400ms
-  (~2s) the same day — still a mitigation, not a fix, since no finite retry budget is guaranteed
-  under bad enough network conditions. A **separate, real bug** was also found and fixed the same
-  day: the `catch` block redirected to `/category` on *any* failure, not just a confirmed
-  `category === null` — meaning this race (or any transient failure) made an already-onboarded
-  user's profile look wiped, sending them back through onboarding, even though their real database
-  row was completely untouched (confirmed directly against the DB). Now only a confirmed null
-  redirects to `/category`; any other failure falls back to `/` instead, which has a real
-  error/loading state thanks to M32's `TodayBriefing`. **The actual root cause is diagnosed but
-  deliberately deferred to 2026-08-25**: stop the `useEffect` from redundantly re-running the check
-  when the explicit, correctly-timed `navigate`-callback call already handled it (a `useRef` guard
-  set by the explicit call site, checked by the effect) — needed in both `sign-in.tsx` and
-  `sign-up.tsx`. The `useEffect` still needs to exist for one legitimate case (an already-signed-in
-  user landing back on `/sign-in`/`/sign-up` with no explicit handler running), so it can't just be
-  deleted.
+  `isSignedIn`), and the duplicate could lose a timing race against Clerk's session activation.
+  Two real fixes landed together: (1) a `useRef` guard (`hasRedirected`), set **synchronously
+  before** calling `finalize`/`setActive` — not inside their `navigate` callback, since that runs
+  asynchronously and isn't guaranteed to execute before React reacts to `isSignedIn` changing and
+  fires the effect; setting it before the call, on the same synchronous tick, closes that ordering
+  gap for real. (2) Switched from the outer `getToken` (from `useAuth()`, which lags slightly
+  behind session activation) to `session.getToken()` — the token method on the concrete session
+  object Clerk hands directly to the `navigate` callback, tied to the session that's already
+  confirmed active rather than the broader React hook state. Applied consistently across all three
+  auth methods (password, Google, Apple) in both `sign-in.tsx` and `sign-up.tsx` — a real
+  inconsistency was caught and fixed along the way: `sign-up.tsx` initially got the `session.getToken()`
+  upgrade on all three flows while `sign-in.tsx`'s Apple flow was missed, still using the old
+  outer-`getToken`/no-`navigate`-callback pattern; brought in line with the other two. The
+  `useEffect` itself is untouched — still needed for a user landing back on `/sign-in`/`/sign-up`
+  while already signed in — the fix is entirely in what happens around it.
+
+  **History, for context:** originally found 2026-08-19 (M24 device verification), "fixed" 2026-08-20
+  with a `getToken()` retry loop that reduced frequency but didn't eliminate the race — reopened
+  2026-08-24 when it recurred live under exceptionally unstable network conditions (multiple
+  hotspot switches, repeated backend restarts). A separate, real bug was also found and fixed
+  2026-08-24: the `catch` block redirected to `/category` on *any* failure, not just a confirmed
+  `category === null`, meaning a transient failure could make an already-onboarded user's profile
+  look wiped (sending them back through onboarding) even though their real database row was
+  completely untouched (confirmed directly against the DB at the time). That fix — only a confirmed
+  null redirects to `/category`, anything else falls back to `/` — is independent of today's fix
+  and stays in place.
 
 ## Commands
 
@@ -2494,18 +2486,14 @@ updated 2026-08-20 (M26 closed), updated 2026-08-21 (M27 confirmed live and clos
 2026-08-21 (M28 confirmed live and closed), updated 2026-08-21 (M29 confirmed live and closed),
 updated 2026-08-24 (backend indicator-data extension resolved M30's real blocker), updated
 2026-08-24 (M30 itself deferred, not part of V1), updated 2026-08-24 (M31 backend done, mobile side
-started), updated 2026-08-24 (M31 confirmed live and closed), updated again 2026-08-24 (M32 in
-progress, `redirectAfterAuth` reopened, root-cause fix deferred to 2026-08-25) — item 1 below now
-covers tomorrow's priority.)*
+started), updated 2026-08-24 (M31 confirmed live and closed), updated 2026-08-24 (M32 in progress,
+`redirectAfterAuth` reopened), updated again 2026-08-25 (`redirectAfterAuth` genuinely fixed and
+confirmed live this time) — item 1 below now covers finishing M32.)*
 
-1. **PRIORITY when resuming (2026-08-25): fix `redirectAfterAuth`'s actual root cause.** Add a
-   `useRef` guard in both `sign-in.tsx` and `sign-up.tsx` so the `useEffect` watching `isSignedIn`
-   skips its own call to `redirectAfterAuth` when the explicit, correctly-timed `navigate`-callback
-   call has already handled it this mount — see the Known Issues write-up for the exact shape.
-   Don't just delete the `useEffect`; it's still needed for a user landing back on `/sign-in`/
-   `/sign-up` while already signed in. Once that's in, finish Milestone 32: add a sign-out control
-   (Clerk's `useAuth().signOut()`, no new dependency needed — a real, newly-discovered gap, not
-   part of M32's original scope) and do a clean on-device pass confirming both the signed-in
+1. **PRIORITY when resuming: finish Milestone 32.** `redirectAfterAuth`'s race is resolved (see
+   Known Issues) and no longer something to work around while testing. What's left: add a sign-out
+   control (Clerk's `useAuth().signOut()`, no new dependency needed — a real, newly-discovered gap,
+   not part of M32's original scope) and do a clean on-device pass confirming both the signed-in
    (`TodayBriefing`) and signed-out (`SignInPrompt`) paths render correctly, plus pull-to-refresh.
 2. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
