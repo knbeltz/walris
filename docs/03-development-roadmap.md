@@ -1364,8 +1364,70 @@ briefing — the real thing this entire project has been building toward — not
 
 ## Milestone 33 — Empty, Error, and Loading States
 
-Unchanged in concept from the original scope: resilient UI for no-briefing-yet, backend-unavailable,
-and loading states, with a consistent way to retry failed requests.
+### Objective
+
+Replace `TodayBriefing`'s (`app/index.tsx`) placeholder loading/error handling — `<Text>Loading...</Text>`
+and a raw `<Text>{error.message}</Text>` dump — with real, designed states per `docs/04` §10.9
+(Empty State) and §10.10 (Error State), plus a consistent, reusable way to retry a failed request.
+Deliberately deferred from M32 to avoid polishing something that milestone was always going to
+hand off.
+
+**Real distinction found while scoping:** "empty" and "no data yet" are two different states that
+currently look identical. The backend has two separate fallback paths that both produce
+`content.sections: []` — `briefings.py`'s "no briefing generated yet" fallback (headline: "No
+briefing available yet for today.") and `prompt_services.py`'s `build_quiet_day_briefing` (headline:
+"Nothing notable to report today.", for a user whose filtered dataset was genuinely empty that day).
+A **real** generated briefing always has non-empty `sections` (M18's OpenAI generation always
+produces themed sections) — so `content.sections.length === 0` is a reliable signal to treat as the
+empty state, rather than rendering the fallback headline dressed up as if it were real narrative
+content (which is what happens today).
+
+### Deliverables
+
+- `mobile/components/ui/empty-state.tsx` — `EmptyState`, per `docs/04` §10.9's tone (calm, helpful,
+  non-alarming) and example copy ("Today's briefing is not available yet. Check back shortly.").
+- `mobile/components/ui/error-state.tsx` — `ErrorState`, per `docs/04` §10.10's tone (clear, honest,
+  recoverable) and example copy ("We couldn't load today's briefing. Please try again."), with a
+  required retry action — a button/pressable calling an `onRetry` prop. This is the "consistent way
+  to retry" the milestone calls for: any screen can reuse this component instead of inventing its
+  own retry UI.
+- `mobile/components/ui/loading-state.tsx` — `LoadingState`, a minimal, calm loading indicator
+  (`ActivityIndicator`, not just literal "Loading..." text) — `docs/04` has no dedicated spec for
+  this one beyond its QA checklist asking that loading states exist at all, so this is a reasonable
+  default rather than a strict requirement.
+- `TodayBriefing` updated to use all three: `LoadingState` for `isPending`, `ErrorState` (wired to
+  `useTodayBriefing`'s `refetch`) for `isError`, and `EmptyState` when `data.content.sections.length
+  === 0`, falling through to the real `BriefingNarrative`/`NewsCard`s otherwise.
+
+**Scope boundary:** the onboarding screens (`category.tsx`/`topics.tsx`) have their own ad hoc
+error handling (`setErrorMessage` + inline `<Text>`) for different concerns (form validation, not
+just network retry) — not being retrofitted onto these new components as part of this milestone.
+`ErrorState`/`EmptyState`/`LoadingState` are built for reuse by future screens, not a mandate to
+touch every existing one now.
+
+### Acceptance Criteria
+
+- Verified live on a physical device: a user with a real generated briefing sees the real content
+  (unchanged from M32); a user whose briefing is a quiet-day/not-yet-generated fallback sees the
+  calm `EmptyState`, not a headline styled like real content; a deliberately-triggered failure
+  (e.g. killing the backend mid-request) shows `ErrorState`, and tapping its retry action actually
+  triggers a new request and recovers once the backend is back.
+
+### Definition of Done
+
+Every state `useTodayBriefing` can be in — loading, a real error, empty/no-content, and success —
+has its own real, `docs/04`-styled treatment, and failed requests are recoverable without
+force-quitting or reloading the app.
+
+### Suggested Commit
+
+`feat: add designed empty, error, and loading states`
+
+### Claude Code Tutor Prompt
+
+> Help me build reusable empty and error state components for Walris, following the tone and copy
+> guidelines in the design system. Explain how to distinguish "no data yet" from "a real error"
+> using what the API actually returns, rather than guessing from the error message.
 
 ## Milestone 34 — Mobile Integration Test Pass
 
