@@ -7,6 +7,9 @@ import { DailyBriefingHeader } from '@/components/ui/daily-briefing-header';
 import { NewsCard } from '@/components/ui/news-card';
 import { BriefingNarrative } from '@/components/ui/briefing-narrative';
 import { useAuth } from '@clerk/expo';
+import { LoadingState } from '@/components/ui/loading-state';
+import { ErrorState } from '@/components/ui/error-state';
+import { EmptyState } from '@/components/ui/empty-state';
 
 function SignInPrompt() {
   return (
@@ -33,14 +36,23 @@ function SignOut() {
 }
 
 function TodayBriefing() {
-  const { data, isPending, isError, error } = useTodayBriefing();
+  const { data, isPending, isError, refetch } = useTodayBriefing();
 
   if (isPending) {
-    return <Text>Loading...</Text>;
+    return <LoadingState message="Loading your briefing..." />;
   }
 
   if (isError) {
-    return <Text>{error.message}</Text>;
+    return <ErrorState onRetry={refetch} />;
+  }
+
+  if (data.content.sections.length === 0) {
+    return (
+      <EmptyState
+        title="Today's briefing is not available yet."
+        description="Check back shortly."
+      />
+    );
   }
 
   return (
