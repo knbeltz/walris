@@ -1,29 +1,21 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-09-02 (Milestone 33 — Empty, Error, and Loading States — is complete.
-`mobile/components/ui/loading-state.tsx` (`LoadingState`, an `ActivityIndicator` + optional
-message), `error-state.tsx` (`ErrorState`, per `docs/04` §10.10's exact example copy as defaults,
-with a required `onRetry` prop wired to a real `Button`), and `empty-state.tsx` (`EmptyState`, per
-§10.9's calm tone) are all built. `app/index.tsx`'s `TodayBriefing` uses all three — `LoadingState`
-for `isPending`, `ErrorState` (`onRetry={refetch}`) for `isError`, and `EmptyState` when
-`data.content.sections.length === 0` — the real signal found while scoping this milestone that
-distinguishes "no content yet" (both of the backend's fallback paths always produce empty
-`sections`) from a real generated briefing (which never does). Review caught several real issues
-before this shipped: `EmptyState`'s title originally used `headlineSm` (Libre Caslon Text, bold) —
-directly contradicting §10.9's "calm, non-alarming" tone, since that weight is reserved elsewhere
-in the app for real content headlines; switched to `bodyLg`/`bodyMd`. An unused `StyleSheet`
-import, an unused `error` variable left over after switching to `ErrorState`'s fixed copy, and a
-"Lodaing" typo were all caught and fixed. Confirmed live on a physical device across all four
-reachable states: the loading spinner, the empty state (today's actual real state — matches
-`docs/04`'s exact copy), a real generated briefing (temporarily pointing the query at 2026-08-17,
-then reverted cleanly), and a deliberately-triggered error with `ErrorState`'s "Try Again" button
-confirmed to actually recover once the backend came back — correctly falling back to the empty
-state again, since today still has no real briefing.
+**Last Updated:** 2026-09-02 (Milestone 34 — Mobile Integration Test Pass — is complete. Scoped to
+iOS-only (this project has never had Android tooling — no Xcode-adjacent Android Studio, no
+emulator, no physical device; tracked explicitly in Known Issues as a real follow-up, not silently
+skipped). Rather than re-verifying each piece M24-M33 already tested in isolation, ran the full
+flow as one continuous journey on a genuinely new account: sign-up with a new email → correctly
+routed to `/category` (a brand-new user has no preferences) → completed category/topic selection →
+real Home Screen → confirmed the empty state (a fresh account has no generated briefing) →
+sign-out → sign back in → correctly routed straight to `/` this time, not back through onboarding,
+confirming the saved preferences correctly gate `redirectAfterAuth`'s routing decision across a
+real session boundary, not just in isolated testing. The backend-down/retry path was not
+re-verified within this same session — M33's isolated verification of that exact mechanism was
+judged sufficient. **Part 3 (Mobile App, Milestones 24-34) is now fully complete.**
 
-Milestone 32 (Home Screen) closed out 2026-08-25 — real screen assembled, sign-out added,
-`redirectAfterAuth`'s race condition genuinely resolved after being incomplete since 2026-08-20;
-see their write-ups below.)
+Milestone 33 (Empty, Error, and Loading States) closed out earlier the same day — see its
+write-up below for the full state-by-state verification.)
 
 Milestone 31 (Supporting News Cards) and Milestone 30's deferral both closed out 2026-08-24; see
 their write-ups below.)
@@ -202,7 +194,8 @@ bugs review caught in all of these milestones before they shipped.
   added, verified live on a physical device across every path — see notes below)
 - [x] **Milestone 33 — Empty, Error, and Loading States** (all three components built, wired into
   `TodayBriefing`, verified live on a physical device across all four states — see notes below)
-- [ ] Milestone 34 — Mobile App (Part 3, remaining)
+- [x] **Milestone 34 — Mobile Integration Test Pass** (iOS-only, Android tracked as a follow-up —
+  full flow confirmed as one continuous journey on a physical device — see notes below)
 - [ ] Milestones 35–50 — Notifications, QA, Deployment & Launch (Part 4)
 
 ## Current Milestone
@@ -238,13 +231,57 @@ sign-out, all debug scaffolding removed) and confirmed live on a physical device
 See its write-up and Known Issues (for `redirectAfterAuth`'s resolved race) below. **Milestone 33
 (Empty, Error, and Loading States) is also complete** — `LoadingState`/`ErrorState`/`EmptyState`
 built, wired into `TodayBriefing`, and confirmed live on a physical device across all four
-reachable states, including retry actually recovering after a real backend outage.
+reachable states, including retry actually recovering after a real backend outage. **Milestone 34
+(Mobile Integration Test Pass) is also complete, iOS-only** (Android tracked as a real follow-up —
+see Known Issues) — the full flow confirmed as one continuous journey on a genuinely new account:
+sign-up → onboarding → real Home Screen → sign-out → sign back in → correctly routed straight to
+`/`, not back through onboarding. **Part 3 (Mobile App, Milestones 24-34) is now fully complete.**
 
 **Milestone 14's core flow is verified end-to-end on a real device** — sign-up → `/category` →
 `/topics` → `/` all confirmed working against the live database. Two smaller pieces of M14 are
 still outstanding (name field, settings screen — see M14 notes below), but the flow itself is no
 longer blocked. The personalization pivot is fully planned in
 `docs/08-personalization-pivot-plan.md`.
+
+### Milestone 34 — Mobile Integration Test Pass (complete, 2026-09-02, iOS-only)
+
+Per `docs/03`'s M34 scope: end-to-end verification of the full personalized flow — sign-in →
+onboarding → Home Screen → real backend data — run as one continuous journey rather than the
+piece-by-piece verification M24-M33 each already did individually.
+
+**Scope decision:** `docs/03`'s original text calls for "both iOS and Android," but this project
+has never had Android tooling — no Android Studio, no emulator, no physical Android device.
+Scoped M34 to iOS-only rather than block on setting up an entire second platform's tooling;
+Android is now a tracked, explicit follow-up in Known Issues, not a silently dropped requirement.
+
+**What this milestone actually added:** every prior mobile milestone verified its own piece in
+isolation — auth methods individually (M24, and the `redirectAfterAuth` fixes), the Home Screen's
+states individually (M33), sign-out on its own (M32). What hadn't been confirmed was all of it
+working *together*, across a real session boundary, on a genuinely fresh account — not the same
+reused test user whose preferences had been manually reset via direct database writes several
+times throughout this project's testing.
+
+**Test run, on a physical iPhone:**
+
+1. Signed out of the existing account.
+2. Signed up with a brand-new email.
+3. Confirmed `redirectAfterAuth` correctly routed the new account to `/category` (no preferences
+   exist yet for a brand-new user).
+4. Completed category and topic selection; landed on the real Home Screen.
+5. Confirmed the empty state rendered (a fresh account genuinely has no generated briefing) —
+   the same `EmptyState` component M33 built and verified, now proven correct for a real new user
+   rather than the manually-reset existing one.
+6. Signed out, then signed back in with the same new account.
+7. Confirmed `redirectAfterAuth` this time routed straight to `/` — not back through onboarding —
+   correctly reading the preferences saved in step 4 back out on a genuinely separate sign-in,
+   proving the round trip works across a real session boundary, not just within one continuous
+   render.
+
+**Deliberately not re-verified:** the backend-down/retry mechanism, since M33 already proved that
+exact mechanism works in isolation, and re-running it within this same session was judged
+unnecessary rather than an oversight.
+
+**Part 3 (Mobile App, Milestones 24-34) is now fully complete.**
 
 ### Milestone 33 — Empty, Error, and Loading States (complete, 2026-08-25–2026-09-02)
 
@@ -2411,7 +2448,11 @@ walris/
 - No Xcode or Android Studio installed on this machine (only Xcode Command Line Tools) — no iOS
   Simulator or Android emulator available. Mobile verification happens via Expo Go on a physical
   iPhone 17 Pro instead. Fine for now; would need addressing before any native-build-only feature
-  (e.g. custom native modules) or CI device testing later.
+  (e.g. custom native modules) or CI device testing later. **This means the app has never been run
+  on Android at all** — a real, tracked gap surfaced explicitly during M34 scoping (2026-09-02).
+  `docs/03`'s M34 (Mobile Integration Test Pass) was originally scoped for "both iOS and Android";
+  decided to scope M34 to iOS-only rather than block on setting up Android tooling now — Android
+  becomes its own follow-up once a device/emulator is available, not silently skipped.
 - `mobile/package.json` has a `"react-dom": "19.1.0"` entry under `overrides` — needed to resolve
   an expo-router internal peer-dependency conflict (see Milestone 4 notes above). Not a real
   runtime dependency; safe to leave as long as expo-router's DOM-components feature stays unused.
@@ -2563,18 +2604,20 @@ updated 2026-08-24 (backend indicator-data extension resolved M30's real blocker
 started), updated 2026-08-24 (M31 confirmed live and closed), updated 2026-08-24 (M32 in progress,
 `redirectAfterAuth` reopened), updated 2026-08-25 (`redirectAfterAuth` genuinely fixed and confirmed
 live), updated 2026-08-25 (M32 confirmed live and closed), updated 2026-08-25 (M33 code complete,
-on-device verification still pending), updated again 2026-09-02 (M33 confirmed live and closed) —
-item 1 below now points to Milestone 34.)*
+on-device verification still pending), updated 2026-09-02 (M33 confirmed live and closed), updated
+again 2026-09-02 (M34 confirmed live and closed, iOS-only — Part 3 fully complete) — item 1 below
+now points to Milestone 35, the start of Part 4.)*
 
-1. **PRIORITY when resuming: start Milestone 34 — Mobile Integration Test Pass.** End-to-end
-   verification of the full personalized flow — sign-in → onboarding (category/topics) → home
-   screen fetch → real backend data — including the backend-down state (already substantially
-   covered by M33's error-state verification). **Real gap to account for:** every device
-   verification across this entire project (M4 onward) has been on a physical iPhone via Expo Go —
-   there is no Xcode or Android Studio on this machine (see Known Issues), so Android has never
-   been tested at all. `docs/03`'s M34 scope explicitly calls for "both iOS and Android" — this
-   needs an explicit decision (get access to an Android device/emulator, or consciously scope M34
-   to iOS-only for now and document the gap) rather than being silently skipped.
+1. **PRIORITY when resuming: start Milestone 35 — Expo Notifications Setup**, the first milestone
+   of Part 4 (Notifications, QA, Deployment & Launch). Per `docs/03`: `expo-notifications`/
+   `expo-device`, permission request, Expo push token retrieval, physical-device handling — client
+   capability work that doesn't depend on the personalization model, so it carries over unchanged
+   from the roadmap's original scope. Note: Milestone 21's backend notification-sending logic
+   (`notification_service.py`) is already built and verified — this milestone is specifically the
+   mobile side (requesting permission, obtaining the token) that was deliberately deferred to Part 3
+   back when M21 was built. Android testing remains an explicit, tracked gap (see Known Issues) —
+   worth deciding whether to address it before or during the notifications work, since push
+   notification behavior genuinely differs between iOS and Android.
 2. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
 3. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12

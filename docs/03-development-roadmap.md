@@ -1431,9 +1431,61 @@ force-quitting or reloading the app.
 
 ## Milestone 34 — Mobile Integration Test Pass
 
-Unchanged in concept from the original scope: end-to-end verification of the full personalized
-flow — sign-in → onboarding (category/topics) → home screen fetch → real backend data — on both
-iOS and Android, including the backend-down state.
+### Objective
+
+End-to-end verification of the full personalized flow, run as one continuous journey rather than
+the piece-by-piece verification every milestone from M24-M33 already did individually: sign-up/
+sign-in → onboarding (category/topics) → Home Screen fetch → real backend data → sign-out, on a
+real device, including the backend-down state.
+
+**Scope decision (2026-09-02): iOS-only for now, not part of V1's blocker list.** `docs/03`'s
+original scope calls for "both iOS and Android," but this project has never had Android tooling
+set up — no Android Studio, no emulator, no physical Android device (see Known Issues). Rather
+than silently dropping that half of the milestone or blocking on setting up an entire second
+platform's tooling right now, M34 is explicitly scoped to iOS (the only platform this project has
+ever run on, via Expo Go on a physical iPhone) — Android becomes a tracked, explicit follow-up
+once a device/emulator is available, not a silent gap.
+
+**What this milestone actually adds, given how much has already been verified live:** M24-M33 each
+verified their own piece in isolation (auth methods individually, the Home Screen's states
+individually, sign-out on its own). What hasn't been confirmed is all of it working *together*, in
+one uninterrupted run, on a genuinely fresh account — catching integration issues that only show up
+when one milestone's output feeds directly into the next (e.g., does the exact category/topics a
+user picks during onboarding actually show up correctly in that user's first real Home Screen
+fetch, in the same session, without any manual database resets in between).
+
+### Deliverables
+
+- One documented, uninterrupted test run: sign up with a genuinely new account (not the existing
+  reused test user) → verify `redirectAfterAuth` sends a brand-new user to `/category` → complete
+  category + topic selection → land on the real Home Screen → confirm the empty state (a fresh
+  account has no generated briefing) → sign out → sign back in → confirm `redirectAfterAuth` sends
+  a returning user straight to `/` this time, not back through onboarding.
+- Confirm the backend-down state within this same continuous run (stop the backend mid-session, not
+  just in isolation as M33 already verified) — reconfirms `ErrorState`'s retry recovers without
+  needing to restart the app.
+
+### Acceptance Criteria
+
+- The full run above completes on a physical iPhone with no manual workarounds (no ad hoc database
+  resets required to reach any step) and no unexpected errors.
+- A genuinely new account's category/topics correctly persist and correctly gate `redirectAfterAuth`'s
+  routing decision on the very next sign-in, in the same test session.
+
+### Definition of Done
+
+The complete personalized mobile flow — from a brand-new sign-up through to a real signed-in Home
+Screen and back to sign-out — works as one continuous journey on a real device, with Android
+explicitly tracked as a follow-up rather than silently untested.
+
+### Suggested Commit
+
+`docs: record Milestone 34 integration test pass`
+
+### Claude Code Tutor Prompt
+
+> Help me plan an end-to-end integration test for Walris covering sign-up through the Home Screen.
+> Explain why testing each piece individually doesn't guarantee the full journey works together.
 
 ## Mobile App Phase Complete
 
