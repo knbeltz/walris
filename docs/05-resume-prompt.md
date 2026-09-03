@@ -1,21 +1,25 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-09-02 (Milestone 34 — Mobile Integration Test Pass — is complete. Scoped to
-iOS-only (this project has never had Android tooling — no Xcode-adjacent Android Studio, no
-emulator, no physical device; tracked explicitly in Known Issues as a real follow-up, not silently
-skipped). Rather than re-verifying each piece M24-M33 already tested in isolation, ran the full
-flow as one continuous journey on a genuinely new account: sign-up with a new email → correctly
-routed to `/category` (a brand-new user has no preferences) → completed category/topic selection →
-real Home Screen → confirmed the empty state (a fresh account has no generated briefing) →
-sign-out → sign back in → correctly routed straight to `/` this time, not back through onboarding,
-confirming the saved preferences correctly gate `redirectAfterAuth`'s routing decision across a
-real session boundary, not just in isolated testing. The backend-down/retry path was not
-re-verified within this same session — M33's isolated verification of that exact mechanism was
-judged sufficient. **Part 3 (Mobile App, Milestones 24-34) is now fully complete.**
+**Last Updated:** 2026-09-02 (Milestone 35 — Expo Notifications Setup — is in progress.
+`expo-notifications`/`expo-device` installed. `mobile/lib/notifications.ts`'s
+`registerForPushNotificationsAsync` built: gates on `Device.isDevice` (push tokens don't work on
+simulators), checks existing permission before re-prompting, requests permission if needed, and
+returns a real Expo push token via `getExpoPushTokenAsync()` when granted. Review caught a real,
+serious bug before this shipped: a duplicate permission check after the request used the *stale*
+pre-request `existingStatus` instead of the post-request `finalStatus` — meaning a user granting
+permission for the very first time (the primary case this feature exists for) was incorrectly
+reported as having denied it, confirmed via a direct trace of all three cases (fresh allow, fresh
+deny, returning user already granted). Fixed by removing the redundant check. A "physicial" typo
+was also fixed. **Still outstanding:** the Android notification channel setup
+(`setNotificationChannelAsync`, per M35's plan — cheap standard boilerplate, not skipped just
+because Android testing itself remains out of scope); `registerForPushNotificationsAsync` isn't
+called from anywhere in the app yet (confirmed via grep — built but unwired); and no on-device
+verification has happened yet (does the real permission prompt appear, does granting it return a
+real non-empty token, does denying it avoid crashing).
 
-Milestone 33 (Empty, Error, and Loading States) closed out earlier the same day — see its
-write-up below for the full state-by-state verification.)
+Milestone 34 (Mobile Integration Test Pass) closed out earlier the same day — Part 3 (Mobile App,
+Milestones 24-34) is now fully complete; see its write-up below.)
 
 Milestone 31 (Supporting News Cards) and Milestone 30's deferral both closed out 2026-08-24; see
 their write-ups below.)
@@ -196,7 +200,10 @@ bugs review caught in all of these milestones before they shipped.
   `TodayBriefing`, verified live on a physical device across all four states — see notes below)
 - [x] **Milestone 34 — Mobile Integration Test Pass** (iOS-only, Android tracked as a follow-up —
   full flow confirmed as one continuous journey on a physical device — see notes below)
-- [ ] Milestones 35–50 — Notifications, QA, Deployment & Launch (Part 4)
+- [~] **Milestone 35 — Expo Notifications Setup** (in progress — permission/token function built
+  and bug-fixed; not yet wired into the app or verified on-device — see notes below)
+- [ ] Milestones 36–50 — Notifications, QA, Deployment & Launch (Part 4, remaining — M36 already
+  built as part of M21, see M35's write-up)
 
 ## Current Milestone
 
@@ -236,12 +243,56 @@ reachable states, including retry actually recovering after a real backend outag
 see Known Issues) — the full flow confirmed as one continuous journey on a genuinely new account:
 sign-up → onboarding → real Home Screen → sign-out → sign back in → correctly routed straight to
 `/`, not back through onboarding. **Part 3 (Mobile App, Milestones 24-34) is now fully complete.**
+**Milestone 35 (Expo Notifications Setup), the start of Part 4, is in progress** — the permission/
+token function is built and a real bug fixed, but not yet wired into the app or verified on-device.
 
 **Milestone 14's core flow is verified end-to-end on a real device** — sign-up → `/category` →
 `/topics` → `/` all confirmed working against the live database. Two smaller pieces of M14 are
 still outstanding (name field, settings screen — see M14 notes below), but the flow itself is no
 longer blocked. The personalization pivot is fully planned in
 `docs/08-personalization-pivot-plan.md`.
+
+### Milestone 35 — Expo Notifications Setup (in progress, started 2026-09-02)
+
+Per `docs/03`'s M35 scope: give the mobile app the ability to request notification permission and
+obtain a real Expo push token — client-side capability only, no backend call yet (that's M37, once
+the already-built M36 API is wired up).
+
+**Real finding while scoping this milestone:** `docs/03`'s Milestone 36 (Device Token Registration
+API) is already fully built — `POST /v1/notifications/register` (`backend/app/routers/
+notifications.py`) exists exactly as M36 describes, built as part of Milestone 21's backend work
+and live-verified during M22/M23's integration pass. Once M35 (this one) and M37 are done, the
+entire registration pipeline is complete with no further backend work needed.
+
+**What got built:**
+
+- Installed `expo-notifications` and `expo-device` via `npx expo install`.
+- `mobile/lib/notifications.ts` — `registerForPushNotificationsAsync()`: gates on `Device.isDevice`
+  (Expo push tokens don't work on simulators, only real hardware), checks
+  `Notifications.getPermissionsAsync()` before re-prompting a user who already granted it,
+  requests permission via `requestPermissionsAsync()` if needed, and returns a real token via
+  `getExpoPushTokenAsync()` once granted.
+
+**A real, serious bug caught and fixed during review, before this shipped:** a duplicate
+denial-check after the permission request used the *stale* pre-request `existingStatus` variable
+instead of the post-request `finalStatus` — as two separate, non-nested `if` statements, not one.
+Confirmed via a direct trace of all three real cases: a fresh user granting permission for the
+first time was incorrectly reported as having denied it (the stale check always fired for anyone
+who wasn't already granted before the request even happened); a fresh user denying was correctly
+reported as denied (coincidentally, since both checks agreed); and only a returning user who
+already had permission from a prior session worked correctly by accident, since that path skips
+the request entirely. In other words: the one case this whole feature exists for — a user granting
+permission for the first time — was completely broken. Fixed by removing the redundant stale
+check, leaving only the correct `finalStatus` check. A "physicial" typo was also fixed.
+
+**Still outstanding:**
+
+- The Android notification channel setup (`Notifications.setNotificationChannelAsync`) — standard
+  Expo boilerplate that should exist regardless of Android testing remaining out of scope.
+- `registerForPushNotificationsAsync` isn't called from anywhere in the app yet (confirmed via
+  grep) — built but unwired.
+- On-device verification: does the real OS permission prompt appear, does granting it return a
+  real non-empty token (log it, since nothing consumes it yet), does denying it avoid crashing.
 
 ### Milestone 34 — Mobile Integration Test Pass (complete, 2026-09-02, iOS-only)
 
@@ -2605,19 +2656,21 @@ started), updated 2026-08-24 (M31 confirmed live and closed), updated 2026-08-24
 `redirectAfterAuth` reopened), updated 2026-08-25 (`redirectAfterAuth` genuinely fixed and confirmed
 live), updated 2026-08-25 (M32 confirmed live and closed), updated 2026-08-25 (M33 code complete,
 on-device verification still pending), updated 2026-09-02 (M33 confirmed live and closed), updated
-again 2026-09-02 (M34 confirmed live and closed, iOS-only — Part 3 fully complete) — item 1 below
-now points to Milestone 35, the start of Part 4.)*
+2026-09-02 (M34 confirmed live and closed, iOS-only — Part 3 fully complete), updated again
+2026-09-02 (M35 in progress — permission/token function built, not yet wired or verified) — item 1
+below is now about finishing M35.)*
 
-1. **PRIORITY when resuming: start Milestone 35 — Expo Notifications Setup**, the first milestone
-   of Part 4 (Notifications, QA, Deployment & Launch). Per `docs/03`: `expo-notifications`/
-   `expo-device`, permission request, Expo push token retrieval, physical-device handling — client
-   capability work that doesn't depend on the personalization model, so it carries over unchanged
-   from the roadmap's original scope. Note: Milestone 21's backend notification-sending logic
-   (`notification_service.py`) is already built and verified — this milestone is specifically the
-   mobile side (requesting permission, obtaining the token) that was deliberately deferred to Part 3
-   back when M21 was built. Android testing remains an explicit, tracked gap (see Known Issues) —
-   worth deciding whether to address it before or during the notifications work, since push
-   notification behavior genuinely differs between iOS and Android.
+1. **PRIORITY when resuming: finish Milestone 35.** `mobile/lib/notifications.ts`'s
+   `registerForPushNotificationsAsync` is built and a real permission-check bug is fixed. Still
+   needed: the Android notification channel setup (`Notifications.setNotificationChannelAsync`,
+   standard boilerplate regardless of Android testing being out of scope), wiring the function up
+   to actually be called from somewhere in the app (it isn't yet), and on-device verification —
+   does the real permission prompt appear, does granting it return a real non-empty token, does
+   denying it avoid crashing. Once confirmed, move to Milestone 36 (already built, see M35's
+   write-up) and Milestone 37 (wiring the token to the registration endpoint). Android testing
+   remains an explicit, tracked gap (see Known Issues) — worth deciding whether to address it
+   before or during the notifications work, since push notification behavior genuinely differs
+   between iOS and Android.
 2. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
 3. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12

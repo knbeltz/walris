@@ -1549,17 +1549,67 @@ By the end of this phase, Walris should have:
 
 ## Milestone 35 — Expo Notifications Setup
 
-Unchanged from the original scope (`expo-notifications`/`expo-device`, permission request, Expo
-push token retrieval, physical-device handling) — this is client-side capability work that never
-depended on the event-vs-personalization model.
+### Objective
+
+Give the mobile app the ability to request notification permission and obtain a real Expo push
+token — client-side capability only, no backend call yet (that's M37, once M36's already-built API
+is wired up). Unchanged from the original scope; this never depended on the event-vs-personalization
+model.
+
+**Scope note found while grounding this milestone:** `docs/03`'s Milestone 36 (Device Token
+Registration API) is **already built** — `POST /v1/notifications/register` (`backend/app/routers/
+notifications.py`) exists exactly as M36 describes: authenticated via `get_current_user`, storing
+`expo_push_token`/`device_id`/`platform`/`timezone` against `device_tokens.user_id` directly. It
+was built as part of Milestone 21's backend work and live-verified during M22/M23's integration
+pass. So once M35 (this milestone) and M37 (wiring the two together) are done, the full
+registration pipeline is complete — there's no new backend work left in this sequence, just two
+mobile milestones.
+
+### Deliverables
+
+- Install `expo-notifications` and `expo-device` (`npx expo install`, matching how M27's font
+  packages were installed).
+- A permission-request flow using `Notifications.requestPermissionsAsync()`, gated on
+  `Device.isDevice` — Expo push tokens don't work on simulators, only real devices (this project
+  has only ever tested on physical hardware anyway, so this should be a non-issue in practice, but
+  the check still needs to exist so the app fails gracefully rather than silently on anyone who
+  ever does run it in a simulator).
+- Retrieve the actual Expo push token via `Notifications.getExpoPushTokenAsync()`.
+- The standard Android notification channel setup (`Notifications.setNotificationChannelAsync`) —
+  write this correctly even though Android isn't tested yet (per M34's decision); this is cheap,
+  standard Expo boilerplate, not something to skip just because verification is iOS-only for now.
+
+### Acceptance Criteria
+
+- Verified live on the physical iPhone this project has used throughout: permission prompt
+  appears, granting it returns a real, non-empty Expo push token (log it to confirm, since there's
+  nothing to register it against yet).
+- Denying permission doesn't crash the app — it's a real, reachable user choice, not just a happy
+  path to test.
+
+### Definition of Done
+
+The app can obtain a real Expo push token on a physical device, ready for M37 to actually send it
+to the (already-built) registration endpoint.
+
+### Suggested Commit
+
+`feat: add Expo push notification permission and token retrieval`
+
+### Claude Code Tutor Prompt
+
+> Help me set up Expo push notification permissions in Walris. Explain why Expo push tokens only
+> work on physical devices, not simulators, and how to handle a user denying permission gracefully.
 
 ## Milestone 36 — Device Token Registration API
 
-Replaces "Notification Token API." Since V1 requires authentication before the app is usable at
-all, there's no anonymous-token flow to build anymore — `POST /v1/notifications/register` is an
-authenticated endpoint (same `get_current_user` pattern as the preferences endpoint), storing the
-token against `device_tokens.user_id` directly at registration time rather than registering
-anonymously and linking later.
+**Already complete** — built as part of Milestone 21's backend work, ahead of this roadmap
+position, and live-verified during M22/M23's integration pass. See M35's section above for the
+full note. Original scope, for reference: replaces "Notification Token API." Since V1 requires
+authentication before the app is usable at all, there's no anonymous-token flow to build anymore —
+`POST /v1/notifications/register` is an authenticated endpoint (same `get_current_user` pattern as
+the preferences endpoint), storing the token against `device_tokens.user_id` directly at
+registration time rather than registering anonymously and linking later.
 
 ## Milestone 37 — Notification Registration Flow
 
