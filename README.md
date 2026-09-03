@@ -46,7 +46,7 @@ Full documentation lives in [`docs/`](docs/):
 
 ## Status
 
-In active development. **Milestones 1-29 and 31-32 are complete** — the entire backend build for the
+In active development. **Milestones 1-29 and 31-33 are complete** — the entire backend build for the
 personalization pivot: backend foundation, Supabase, CI, user accounts via Clerk, category/topic
 selection, the FRED/Marketaux fetch services, a full fetch-filter-persist-cleanup pipeline for
 daily market/news data, per-user OpenAI briefing generation, the daily briefing orchestrator tying
@@ -56,14 +56,14 @@ daily jobs — all verified end-to-end against live APIs, the live OpenAI API, t
 API, and the live database, including a real weekday run on 2026-08-17 confirming real notification
 deactivation. Milestone 21's mobile registration flow is deliberately deferred to the Mobile App
 phase. Wiring M23's admin endpoints to an actual hosted cron schedule is deferred to Milestone 42,
-once the backend has a real deployment to point one at. **Milestones 24 through 29 and 31-32, the
+once the backend has a real deployment to point one at. **Milestones 24 through 29 and 31-33, the
 start of the Mobile App phase, are all complete** — a shared, authenticated fetch wrapper
 (`mobile/lib/apiClient.ts`), Zod schemas (`mobile/schemas/`) validating the briefing, preferences,
 and news API responses, a `useTodayBriefing` TanStack Query hook, typography/spacing/radius theme
-tokens (`mobile/theme/`), a shared `Screen` layout component, and the actual Home Screen —
-personalized narrative, supporting news cards, sign-in/sign-out, and pull-to-refresh, all verified
-end-to-end on a physical device. **Milestone 30 (Key Indicator Chart Component) is deferred, not
-part of V1** — the underlying indicator data is shipped and available, but a chart wasn't judged
-worth building yet given how sparse the historical data still is. Next up: Milestone 33 (Empty,
-Error, and Loading States). See `docs/05-resume-prompt.md` for the current milestone and next
-steps.
+tokens (`mobile/theme/`), a shared `Screen` layout component, the actual Home Screen —
+personalized narrative, supporting news cards, sign-in/sign-out, and pull-to-refresh — and real,
+designed empty/error/loading states with working retry, all verified end-to-end on a physical
+device. **Milestone 30 (Key Indicator Chart Component) is deferred, not part of V1** — the
+underlying indicator data is shipped and available, but a chart wasn't judged worth building yet
+given how sparse the historical data still is. Next up: Milestone 34 (Mobile Integration Test
+Pass). See `docs/05-resume-prompt.md` for the current milestone and next steps.

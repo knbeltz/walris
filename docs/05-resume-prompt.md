@@ -1,28 +1,29 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-08-25 (Milestone 33 — Empty, Error, and Loading States — is in progress,
-code complete, on-device verification still pending. `mobile/components/ui/loading-state.tsx`
-(`LoadingState`, an `ActivityIndicator` + optional message), `error-state.tsx` (`ErrorState`, per
-`docs/04` §10.10's exact example copy as defaults, with a required `onRetry` prop wired to a real
-`Button`), and `empty-state.tsx` (`EmptyState`, per §10.9's calm tone) are all built.
-`app/index.tsx`'s `TodayBriefing` now uses all three — `LoadingState` for `isPending`, `ErrorState`
-(`onRetry={refetch}`) for `isError`, and `EmptyState` when `data.content.sections.length === 0` —
-the real signal found while scoping this milestone that distinguishes "no content yet" (both of the
-backend's fallback paths always produce empty `sections`) from a real generated briefing (which
-never does). Review caught several real issues before this shipped: `EmptyState`'s title originally
-used `headlineSm` (Libre Caslon Text, bold) — directly contradicting §10.9's "calm, non-alarming"
-tone, since that weight is reserved elsewhere in the app for real content headlines; switched to
-`bodyLg`/`bodyMd`. An unused `StyleSheet` import in `empty-state.tsx`, an unused `error` variable
-left over in `app/index.tsx` after switching to `ErrorState` (which shows fixed copy, not the raw
-error message — a deliberate choice, since `docs/04` calls for calm generic copy, not a technical
-error dumped on the user), and a "Lodaing" typo were all caught and fixed. **Not yet done:**
-on-device verification of all four reachable states (loading, a real briefing, the empty state,
-and a deliberately-triggered error with working retry).
+**Last Updated:** 2026-09-02 (Milestone 33 — Empty, Error, and Loading States — is complete.
+`mobile/components/ui/loading-state.tsx` (`LoadingState`, an `ActivityIndicator` + optional
+message), `error-state.tsx` (`ErrorState`, per `docs/04` §10.10's exact example copy as defaults,
+with a required `onRetry` prop wired to a real `Button`), and `empty-state.tsx` (`EmptyState`, per
+§10.9's calm tone) are all built. `app/index.tsx`'s `TodayBriefing` uses all three — `LoadingState`
+for `isPending`, `ErrorState` (`onRetry={refetch}`) for `isError`, and `EmptyState` when
+`data.content.sections.length === 0` — the real signal found while scoping this milestone that
+distinguishes "no content yet" (both of the backend's fallback paths always produce empty
+`sections`) from a real generated briefing (which never does). Review caught several real issues
+before this shipped: `EmptyState`'s title originally used `headlineSm` (Libre Caslon Text, bold) —
+directly contradicting §10.9's "calm, non-alarming" tone, since that weight is reserved elsewhere
+in the app for real content headlines; switched to `bodyLg`/`bodyMd`. An unused `StyleSheet`
+import, an unused `error` variable left over after switching to `ErrorState`'s fixed copy, and a
+"Lodaing" typo were all caught and fixed. Confirmed live on a physical device across all four
+reachable states: the loading spinner, the empty state (today's actual real state — matches
+`docs/04`'s exact copy), a real generated briefing (temporarily pointing the query at 2026-08-17,
+then reverted cleanly), and a deliberately-triggered error with `ErrorState`'s "Try Again" button
+confirmed to actually recover once the backend came back — correctly falling back to the empty
+state again, since today still has no real briefing.
 
-Milestone 32 (Home Screen) closed out earlier the same day — real screen assembled, sign-out
-added, `redirectAfterAuth`'s race condition genuinely resolved after being incomplete since
-2026-08-20; see their write-ups below.)
+Milestone 32 (Home Screen) closed out 2026-08-25 — real screen assembled, sign-out added,
+`redirectAfterAuth`'s race condition genuinely resolved after being incomplete since 2026-08-20;
+see their write-ups below.)
 
 Milestone 31 (Supporting News Cards) and Milestone 30's deferral both closed out 2026-08-24; see
 their write-ups below.)
@@ -199,8 +200,8 @@ bugs review caught in all of these milestones before they shipped.
   device, including real tap-to-open — see notes below)
 - [x] **Milestone 32 — Home Screen** (real screen assembled, debug scaffolding removed, sign-out
   added, verified live on a physical device across every path — see notes below)
-- [~] **Milestone 33 — Empty, Error, and Loading States** (in progress — all three components
-  built and wired into `TodayBriefing`; on-device verification still outstanding — see notes below)
+- [x] **Milestone 33 — Empty, Error, and Loading States** (all three components built, wired into
+  `TodayBriefing`, verified live on a physical device across all four states — see notes below)
 - [ ] Milestone 34 — Mobile App (Part 3, remaining)
 - [ ] Milestones 35–50 — Notifications, QA, Deployment & Launch (Part 4)
 
@@ -235,9 +236,9 @@ device including real tap-to-open behavior. **Milestone 32 (Home Screen) is also
 real screen is assembled (`BriefingNarrative`, `NewsCard`s, signed-in/out branching, pull-to-refresh,
 sign-out, all debug scaffolding removed) and confirmed live on a physical device across every path.
 See its write-up and Known Issues (for `redirectAfterAuth`'s resolved race) below. **Milestone 33
-(Empty, Error, and Loading States) is in progress** — `LoadingState`/`ErrorState`/`EmptyState` are
-built and wired into `TodayBriefing`, but on-device verification of all four reachable states
-hasn't happened yet.
+(Empty, Error, and Loading States) is also complete** — `LoadingState`/`ErrorState`/`EmptyState`
+built, wired into `TodayBriefing`, and confirmed live on a physical device across all four
+reachable states, including retry actually recovering after a real backend outage.
 
 **Milestone 14's core flow is verified end-to-end on a real device** — sign-up → `/category` →
 `/topics` → `/` all confirmed working against the live database. Two smaller pieces of M14 are
@@ -245,7 +246,7 @@ still outstanding (name field, settings screen — see M14 notes below), but the
 longer blocked. The personalization pivot is fully planned in
 `docs/08-personalization-pivot-plan.md`.
 
-### Milestone 33 — Empty, Error, and Loading States (in progress, started 2026-08-25)
+### Milestone 33 — Empty, Error, and Loading States (complete, 2026-08-25–2026-09-02)
 
 Per `docs/03`'s M33 scope: replace `TodayBriefing`'s placeholder loading/error handling
 (`<Text>Loading...</Text>`, a raw `<Text>{error.message}</Text>` dump) with real, designed states
@@ -297,10 +298,15 @@ components as part of this milestone.
   exception message surfaced to the user).
 - A "Lodaing your briefing..." typo in the `LoadingState` message.
 
-**Still outstanding:** on-device verification of all four reachable states — loading (briefly, on
-first load), a real generated briefing, the empty state (the actual current real-world case, since
-today has no generated briefing), and a deliberately-triggered error (e.g. killing the backend
-mid-request) with confirmation that tapping "Try Again" actually recovers once the backend is back.
+**Verification (2026-09-02):** confirmed live on a physical device across all four reachable
+states. Loading: real spinner observed on load. Empty: today (2026-09-02) genuinely has no
+generated briefing, so this was the app's actual real-world state — matched `docs/04`'s exact
+copy. Real briefing: temporarily pointed the router's `today` at 2026-08-17 (a date with an actual
+generated briefing), confirmed `BriefingNarrative`/`NewsCard`s render correctly, then reverted
+cleanly (confirmed via `git diff` showing no changes). Error + retry: stopped the backend entirely,
+confirmed `ErrorState` rendered with a working "Try Again" button, restarted the backend, and
+confirmed tapping retry actually recovered — correctly falling back to the empty state again,
+since today still has no real briefing.
 
 ### Milestone 32 — Home Screen (complete, 2026-08-24–25)
 
@@ -2556,16 +2562,19 @@ updated 2026-08-24 (backend indicator-data extension resolved M30's real blocker
 2026-08-24 (M30 itself deferred, not part of V1), updated 2026-08-24 (M31 backend done, mobile side
 started), updated 2026-08-24 (M31 confirmed live and closed), updated 2026-08-24 (M32 in progress,
 `redirectAfterAuth` reopened), updated 2026-08-25 (`redirectAfterAuth` genuinely fixed and confirmed
-live), updated 2026-08-25 (M32 confirmed live and closed), updated again 2026-08-25 (M33 code
-complete, on-device verification still pending) — item 1 below now covers finishing M33.)*
+live), updated 2026-08-25 (M32 confirmed live and closed), updated 2026-08-25 (M33 code complete,
+on-device verification still pending), updated again 2026-09-02 (M33 confirmed live and closed) —
+item 1 below now points to Milestone 34.)*
 
-1. **PRIORITY when resuming: finish Milestone 33.** `LoadingState`/`ErrorState`/`EmptyState` are
-   built and wired into `TodayBriefing`. What's left: a clean on-device pass confirming all four
-   reachable states — loading (briefly, on first load), a real generated briefing, the empty state
-   (the current real-world case, since today has no generated briefing), and a deliberately
-   triggered error (e.g. killing the backend mid-request) with confirmation that "Try Again"
-   actually recovers once the backend is back. Once confirmed, formally check off M33 and move to
-   Milestone 34 (Mobile Integration Test Pass).
+1. **PRIORITY when resuming: start Milestone 34 — Mobile Integration Test Pass.** End-to-end
+   verification of the full personalized flow — sign-in → onboarding (category/topics) → home
+   screen fetch → real backend data — including the backend-down state (already substantially
+   covered by M33's error-state verification). **Real gap to account for:** every device
+   verification across this entire project (M4 onward) has been on a physical iPhone via Expo Go —
+   there is no Xcode or Android Studio on this machine (see Known Issues), so Android has never
+   been tested at all. `docs/03`'s M34 scope explicitly calls for "both iOS and Android" — this
+   needs an explicit decision (get access to an Android device/emulator, or consciously scope M34
+   to iOS-only for now and document the gap) rather than being silently skipped.
 2. Two small Milestone 14 loose ends, not blocking anything: a name field (decided to live in
    onboarding, not Clerk sign-up fields) and a settings screen for changing category/topics later.
 3. Rotate the FMP API key (briefly exposed in a terminal error message during Milestone 12
