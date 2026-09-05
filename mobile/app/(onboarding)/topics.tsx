@@ -9,6 +9,7 @@ import { getErrorMessage } from '@/lib/utils';
 import { apiFetch } from '@/lib/apiClient';
 import { UserPreferencesSchema } from '@/schemas/preferences';
 import { Screen } from '@/components/ui/screen';
+import { registerForPushNotificationsAsync } from '@/lib/notifications';
 
 type UserPreferences = {
   category: string | null;
@@ -115,6 +116,18 @@ export default function TopicsScreen() {
       setSavedPreferences(data);
       setCategory(data.category);
       setSelectedTopics(data.additional_topics);
+
+      try {
+        const pushToken = await registerForPushNotificationsAsync();
+        console.log('Expo push token:', pushToken);
+      } catch (notificationError: unknown) {
+        // Not sent to the backend yet (that's Milestone 37) — a failure here
+        // shouldn't block the user from reaching the app.
+        console.error(
+          'Push notification registration failed:',
+          notificationError,
+        );
+      }
 
       router.replace('/');
     } catch (error: unknown) {
