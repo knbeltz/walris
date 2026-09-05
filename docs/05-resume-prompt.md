@@ -1,27 +1,19 @@
 # Walris Resume Prompt
 
 **Document:** docs/05-resume-prompt.md
-**Last Updated:** 2026-09-02 (Milestone 35 — Expo Notifications Setup — is in progress.
-`expo-notifications`/`expo-device` installed. `mobile/lib/notifications.ts`'s
-`registerForPushNotificationsAsync` built: gates on `Device.isDevice` (push tokens don't work on
-simulators), checks existing permission before re-prompting, requests permission if needed, and
-returns a real Expo push token via `getExpoPushTokenAsync()` when granted. Review caught a real,
-serious bug before this shipped: a duplicate permission check after the request used the *stale*
-pre-request `existingStatus` instead of the post-request `finalStatus` — meaning a user granting
-permission for the very first time (the primary case this feature exists for) was incorrectly
-reported as having denied it, confirmed via a direct trace of all three cases (fresh allow, fresh
-deny, returning user already granted). Fixed by removing the redundant check. A "physicial" typo
-was also fixed. Android notification channel setup (`setNotificationChannelAsync`, gated on
-`Platform.OS === 'android'`, `AndroidImportance.MAX`) added — standard boilerplate kept even
-though Android testing itself remains out of scope. Wired into the app: `topics.tsx`'s
-`handleContinue` now calls `registerForPushNotificationsAsync()` right after preferences save
-successfully (matching `docs/02`'s "after onboarding, since the user is already signed in by
-then" guidance), logging the token for now — wrapped in its own try/catch so a denial or failure
-never blocks the user from reaching the app. Sending the token to the backend is Milestone 37, not
-this one. **Still outstanding:** on-device verification — does the real permission prompt appear,
-does granting it log a real non-empty token, does denying it avoid crashing.
+**Last Updated:** 2026-09-04 (Milestone 35 — Expo Notifications Setup — still in progress.
+`mobile/lib/notifications.ts`'s `registerForPushNotificationsAsync` was built and bug-fixed
+2026-09-02 (see full write-up below), but on-device verification hit a real blocker: Expo Go on
+the test device had auto-updated past the project's SDK, eventually requiring SDK 57 against the
+project's SDK 54. Upgraded incrementally, one version at a time (54 → 55 → 56 → 57), fixing two
+real breaks along the way — `expo-router` dropping its `@react-navigation/native` dependency in
+SDK 56 (`ThemeProvider`/`DarkTheme`/`DefaultTheme`/`Theme`/`ImperativeRouter` now come from
+`expo-router` itself), and a missing `mobile/expo-env.d.ts` surfaced by SDK 57's TypeScript 6
+upgrade — plus picking up a fix for a known SDK 56 Hermes memory regression for free. Full detail
+in the M35 write-up below. **Still outstanding:** the on-device verification itself, now unblocked
+but not yet re-attempted.
 
-Milestone 34 (Mobile Integration Test Pass) closed out earlier the same day — Part 3 (Mobile App,
+Milestone 34 (Mobile Integration Test Pass) closed out 2026-09-02 — Part 3 (Mobile App,
 Milestones 24-34) is now fully complete; see its write-up below.)
 
 Milestone 31 (Supporting News Cards) and Milestone 30's deferral both closed out 2026-08-24; see
@@ -300,8 +292,34 @@ check, leaving only the correct `finalStatus` check. A "physicial" typo was also
   its own try/catch so a permission denial or notification-setup failure never blocks the user
   from reaching the app.
 
-**Still outstanding:** on-device verification — does the real OS permission prompt appear, does
-granting it log a real non-empty token, does denying it avoid crashing.
+**Real blocker hit during on-device verification, resolved 2026-09-04:** Expo Go on the test
+device had auto-updated and refused to open the project, first reporting an SDK mismatch, then
+specifically requiring SDK 57 — a 3-version gap from the project's SDK 54. Upgraded incrementally
+(54 → 55 → 56 → 57, one version at a time per Expo's own upgrade guidance, `npm install
+expo@^X.0.0` → `npx expo install --fix` → `npx expo-doctor` → `npx tsc --noEmit` at each step)
+rather than jumping straight to 57, to isolate exactly which version introduced each break. Two
+real breaks found and fixed along the way:
+- **SDK 56 dropped `expo-router`'s dependency on `@react-navigation/native`** in favor of its own
+  internal navigation stack. `ThemeProvider`/`DarkTheme`/`DefaultTheme`/`Theme` now import from
+  `expo-router` directly instead of `@react-navigation/native` (`mobile/app/_layout.tsx`,
+  `mobile/lib/theme.ts`); the `Router` type is now `ImperativeRouter`
+  (`mobile/lib/redirectAfterAuth.ts`).
+- **SDK 57 pulled in TypeScript 6**, which added a stricter diagnostic (TS2882) for side-effect
+  imports lacking ambient module declarations — surfaced on `import '@/global.css'`. Fixed by
+  restoring `mobile/expo-env.d.ts` (Expo's standard generated, gitignored boilerplate that
+  references `expo/types`), which had gone missing.
+- `expo install --fix` also auto-registered `expo-splash-screen` and `expo-status-bar` as explicit
+  config plugins in `mobile/app.json`, now required as of SDK 56.
+- Landing on SDK 57 also resolved a known Hermes V1 memory regression present in SDK 56 (flagged
+  by `expo-doctor`) that could drastically increase memory usage in apps using
+  `react-native-reanimated`/`react-native-worklets` — both already dependencies here.
+- Verified clean at each step and at the final SDK 57 state: `npx tsc --noEmit`, `npx eslint .`,
+  and `npx expo-doctor` (only remaining flag is an unrelated local CocoaPods version notice — this
+  project is tested via Expo Go, not a native build, so it doesn't apply).
+
+**Still outstanding:** on-device verification itself — does the real OS permission prompt appear,
+does granting it log a real non-empty token, does denying it avoid crashing. Was blocked by the SDK
+mismatch above; unblocked now, not yet re-attempted.
 
 ### Milestone 34 — Mobile Integration Test Pass (complete, 2026-09-02, iOS-only)
 
