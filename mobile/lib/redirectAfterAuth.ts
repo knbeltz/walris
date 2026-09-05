@@ -1,8 +1,8 @@
-import type { Router } from 'expo-router';
+import type { ImperativeRouter } from 'expo-router';
 
 export async function redirectAfterAuth(
   getToken: () => Promise<string | null>,
-  router: Router,
+  router: ImperativeRouter,
 ) {
   try {
     let token: string | null = null;

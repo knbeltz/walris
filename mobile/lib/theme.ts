@@ -1,4 +1,4 @@
-import { DarkTheme, DefaultTheme, type Theme } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, type Theme } from 'expo-router';
 
 // Walris V1 is light-only (see app.json userInterfaceStyle); the design system
 // doesn't define a dark palette, so the "dark" entry mirrors "light" for now.
