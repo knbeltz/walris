@@ -11,12 +11,15 @@ pre-request `existingStatus` instead of the post-request `finalStatus` — meani
 permission for the very first time (the primary case this feature exists for) was incorrectly
 reported as having denied it, confirmed via a direct trace of all three cases (fresh allow, fresh
 deny, returning user already granted). Fixed by removing the redundant check. A "physicial" typo
-was also fixed. **Still outstanding:** the Android notification channel setup
-(`setNotificationChannelAsync`, per M35's plan — cheap standard boilerplate, not skipped just
-because Android testing itself remains out of scope); `registerForPushNotificationsAsync` isn't
-called from anywhere in the app yet (confirmed via grep — built but unwired); and no on-device
-verification has happened yet (does the real permission prompt appear, does granting it return a
-real non-empty token, does denying it avoid crashing).
+was also fixed. Android notification channel setup (`setNotificationChannelAsync`, gated on
+`Platform.OS === 'android'`, `AndroidImportance.MAX`) added — standard boilerplate kept even
+though Android testing itself remains out of scope. Wired into the app: `topics.tsx`'s
+`handleContinue` now calls `registerForPushNotificationsAsync()` right after preferences save
+successfully (matching `docs/02`'s "after onboarding, since the user is already signed in by
+then" guidance), logging the token for now — wrapped in its own try/catch so a denial or failure
+never blocks the user from reaching the app. Sending the token to the backend is Milestone 37, not
+this one. **Still outstanding:** on-device verification — does the real permission prompt appear,
+does granting it log a real non-empty token, does denying it avoid crashing.
 
 Milestone 34 (Mobile Integration Test Pass) closed out earlier the same day — Part 3 (Mobile App,
 Milestones 24-34) is now fully complete; see its write-up below.)
@@ -285,14 +288,20 @@ the request entirely. In other words: the one case this whole feature exists for
 permission for the first time — was completely broken. Fixed by removing the redundant stale
 check, leaving only the correct `finalStatus` check. A "physicial" typo was also fixed.
 
-**Still outstanding:**
+**Also completed the same day:**
 
-- The Android notification channel setup (`Notifications.setNotificationChannelAsync`) — standard
-  Expo boilerplate that should exist regardless of Android testing remaining out of scope.
-- `registerForPushNotificationsAsync` isn't called from anywhere in the app yet (confirmed via
-  grep) — built but unwired.
-- On-device verification: does the real OS permission prompt appear, does granting it return a
-  real non-empty token (log it, since nothing consumes it yet), does denying it avoid crashing.
+- Android notification channel setup (`Notifications.setNotificationChannelAsync`, gated on
+  `Platform.OS === 'android'`, `AndroidImportance.MAX`, standard vibration pattern/light color) —
+  kept as real, standard boilerplate even though Android testing itself remains out of scope.
+- Wired into the app: `mobile/app/(onboarding)/topics.tsx`'s `handleContinue` calls
+  `registerForPushNotificationsAsync()` right after preferences save successfully, matching
+  `docs/02`'s "after onboarding, since the user is already signed in by then" guidance. Logs the
+  token for now (nothing consumes it yet — sending it to the backend is Milestone 37). Wrapped in
+  its own try/catch so a permission denial or notification-setup failure never blocks the user
+  from reaching the app.
+
+**Still outstanding:** on-device verification — does the real OS permission prompt appear, does
+granting it log a real non-empty token, does denying it avoid crashing.
 
 ### Milestone 34 — Mobile Integration Test Pass (complete, 2026-09-02, iOS-only)
 
